@@ -2,7 +2,7 @@
 // Hook Claude Code: gate keras (pre), suntik aturan fase hanya saat fase berganti (prompt), reset injeksi setelah compact/resume (start).
 import fs from "node:fs"
 import path from "node:path"
-import { RULES } from "./rules.mjs"
+import { RULES, ALVAR } from "./rules.mjs"
 
 const ev = process.argv[2]
 let input = {}
@@ -11,10 +11,12 @@ const dir = path.join(input.cwd ?? process.cwd(), ".alvar")
 if (!fs.existsSync(dir)) process.exit(0)
 const sp = path.join(dir, "state.json")
 const state = (() => { try { return JSON.parse(fs.readFileSync(sp, "utf8")) } catch { return {} } })()
-const out = (o) => { console.log(JSON.stringify({ hookSpecificOutput: o })); process.exit(0) }
+// writeSync: console.log ke pipe di Windows asinkron, process.exit sesudahnya membuang keluaran.
+const out = (o) => { fs.writeSync(1, JSON.stringify({ hookSpecificOutput: o })); process.exit(0) }
 
 if (ev === "start") {
 	if (state.injected) { state.injected = ""; fs.writeFileSync(sp, JSON.stringify(state)) }
+	out({ hookEventName: "SessionStart", additionalContext: `Alvar aktif. Bila CLAUDE_PLUGIN_ROOT tidak terisi, A = ${ALVAR}` })
 } else if (ev === "prompt") {
 	if (state.phase && state.injected !== state.phase) {
 		state.injected = state.phase
@@ -23,7 +25,7 @@ if (ev === "start") {
 	}
 } else if (ev === "pre") {
 	const ti = input.tool_input ?? {}
-	const blob = JSON.stringify(ti).replace(/\+/g, "/")
+	const blob = JSON.stringify(ti).replace(/\\+/g, "/")
 	const deny = (why) => out({ hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: why })
 	if (/\.alvar\/(quiz\/|state\.json)/.test(blob)) deny("Berkas kunci kuis dan state hanya boleh diakses lewat perintah alvar.mjs.")
 	if (/\.alvar\/sessions\//.test(blob) && /review_verdict:\s*READY/.test(blob) && state.phase !== "review")

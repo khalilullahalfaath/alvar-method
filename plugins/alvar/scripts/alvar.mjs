@@ -24,7 +24,7 @@ const TOPIC = args.find((a) => a.startsWith("--topic="))?.slice(8)
 const REMEDIAL = args.includes("--remedial")
 const [cmd, ...pos] = args.filter((a) => !a.startsWith("--"))
 const say = (s) => console.log(s)
-const die = (s) => { console.log(s); process.exit(1) }
+const die = (s) => { fs.writeSync(1, s + "\n"); process.exit(1) } // writeSync: console.log ke pipe Windows asinkron, exit membuang keluaran
 const stdin = () => fs.readFileSync(0, "utf8")
 const today = () => new Date().toISOString().slice(0, 10)
 
