@@ -1,0 +1,6 @@
+{
+  "name": "alvar",
+  "version": "0.1.0",
+  "description": "Port native metode Alvar dari pi: skills, subagent, hook gate, dan CLI pencatat sesi.",
+  "author": { "name": "HP" }
+}
