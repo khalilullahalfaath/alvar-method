@@ -1,5 +1,6 @@
 {
   "name": "alvar-local",
+  "description": "Plugin lokal metode Alvar untuk Claude Code",
   "owner": { "name": "HP" },
   "plugins": [
     { "name": "alvar", "source": "./plugins/alvar", "description": "Metode Alvar (probe, plan, teach, kuis lock-in) native di Claude Code" }
