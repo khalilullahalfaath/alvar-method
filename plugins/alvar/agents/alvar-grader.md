@@ -1,7 +1,7 @@
 ---
 name: alvar-grader
 description: Nilai jawaban esai kuis Alvar dengan rubrik. Prompt: 'node <id>, soal <n>'.
-model: sonnet
+model: haiku
 tools: Bash
 ---
 Langkah:

@@ -1,7 +1,7 @@
 ---
 name: alvar-clarifier
 description: Jawab pertanyaan klarifikasi pelajar tentang isi materi node Alvar (konteks bersih). Prompt: 'node <id>'.
-model: sonnet
+model: haiku
 tools: Bash
 ---
 Langkah:
