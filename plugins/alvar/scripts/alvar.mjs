@@ -66,7 +66,17 @@ const qpath = (node) => path.join(A, "quiz", `${node}.json`)
 const qload = (node) => { try { return JSON.parse(read(qpath(node))) } catch { return die(`Kuis ${node} belum dimulai. Jalankan: quiz-next ${node}`) } }
 const qsave = (q) => { fs.mkdirSync(path.dirname(qpath(q.node)), { recursive: true }); fs.writeFileSync(qpath(q.node), JSON.stringify(q)) }
 const result = (i) => ({ it: i.it, n: i.n, round: i.round, ...i.ans })
-const OPEN_LOCKED = (text, node) => { const l = ledgerStatus(text, node); return { size: l.size, map: l, open: [...l.entries()].filter(([, st]) => st !== "locked").map(([c]) => c) } }
+const conceptLabel = (text, node, c) => {
+	const m = nodeSection(text, node)?.match(new RegExp("^### " + c.replace(".", "\\.") + "\\s+(.+?)\\s*$", "m"))
+	return m ? `${c} ${m[1].replace(/\|/g, "/")}` : c
+}
+const checkIds = (text, node) => [...new Set([...checklistOf(text, node).matchAll(/\b([A-Z]{1,2}\.\d+)\b/g)].map((m) => m[1]))]
+// Subkonsep di checklist yang belum punya baris Ledger dihitung terbuka (belum diuji), bukan dianggap locked.
+const OPEN_LOCKED = (text, node) => {
+	const l = ledgerStatus(text, node)
+	const unseen = checkIds(text, node).filter((c) => !l.has(c))
+	return { size: l.size + unseen.length, map: l, open: [...[...l.entries()].filter(([, st]) => st !== "locked").map(([c]) => c), ...unseen] }
+}
 
 function quizGate(node, remedial) {
 	consistencyGate()
@@ -121,7 +131,7 @@ function finalize(q) {
 			const mine = results.filter((r) => r.it.concept === c)
 			const kind = mine.some((r) => r.ok && r.it.angle !== "definisi") ? "transfer" : "recognition"
 			const st = remedialStatus(prev.get(c) ?? "edge", mine.map((r) => ({ concept: c, angle: r.it.angle, ok: r.ok, round: 3 })))
-			t = upsertRow(t, "Ledger", LEDGER_HDR, [c, `Node ${node}`, mine.map((r) => `R${r.n}${r.ok ? "" : "x"}`).join(" "), kind, st], [0, 1])
+			t = upsertRow(t, "Ledger", LEDGER_HDR, [conceptLabel(t, node, c), `Node ${node}`, mine.map((r) => `R${r.n}${r.ok ? "" : "x"}`).join(" "), kind, st], [0, 1])
 		}
 		fs.writeFileSync(file, t)
 		const mf = mapRel()
@@ -133,11 +143,12 @@ function finalize(q) {
 		const cs = conceptStatus(flat)
 		for (const [c, st] of Object.entries(cs)) {
 			const kind = results.some((r) => r.it.concept === c && r.ok && r.it.angle !== "definisi") ? "transfer" : "recognition"
-			t = upsertRow(t, "Ledger", LEDGER_HDR, [c, `Node ${node}`, results.filter((r) => r.it.concept === c).map((r) => `Q${r.n}${r.ok ? "" : "x"}`).join(" "), kind, st], [0, 1])
+			t = upsertRow(t, "Ledger", LEDGER_HDR, [conceptLabel(t, node, c), `Node ${node}`, results.filter((r) => r.it.concept === c).map((r) => `Q${r.n}${r.ok ? "" : "x"}`).join(" "), kind, st], [0, 1])
 		}
 		if (q.issue) t = flag(t, node, "write_quiz", q.issue)[0]
 		fs.writeFileSync(file, t)
-		const ns = nodeStatus(flat)
+		const untested = checkIds(t, node).filter((c) => !ledgerStatus(t, node).has(c))
+		const ns = untested.length ? "edge" : nodeStatus(flat)
 		const mf = mapRel()
 		if (mf && fs.existsSync(mf)) fs.writeFileSync(mf, stamp(upsertRow(read(mf), "Node status (otomatis dari write_quiz)", NODE_HDR, [node, ns, `${results.filter((r) => r.ok).length}/${results.length} benar`, `[[${path.basename(file, ".md")}]]`], [0])))
 		const gaps = Object.entries(cs).filter(([c, st]) => st === "edge" && results.filter((r) => r.it.concept === c).every((r) => r.ok) && !results.some((r) => r.it.concept === c && r.ok && r.it.angle !== "definisi")).map(([c]) => c)
