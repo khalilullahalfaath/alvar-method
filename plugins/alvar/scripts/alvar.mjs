@@ -78,6 +78,12 @@ function quizGate(node, remedial) {
 	return { file, t, lesson }
 }
 
+const TRANSFER_ANGLES = ["membedakan", "hitungan", "contoh tandingan", "penerapan kasus baru"]
+function targetedSlots(k) {
+	const angles = shuffle(TRANSFER_ANGLES)
+	return [...Array(k).fill("single"), "essay"].map((type, i) => ({ type, angle: angles[i % angles.length] }))
+}
+
 function startQuiz(node) {
 	const { file, t } = quizGate(node, REMEDIAL)
 	const l = OPEN_LOCKED(t, node)
@@ -88,8 +94,14 @@ function startQuiz(node) {
 		return { node, kind: "remedial", file: path.basename(file), items: [], pending: { round: 3, slots, extra: `## Fokus: remedial untuk subkonsep yang belum locked. Field "concept" harus sama dengan slot.` } }
 	}
 	if (l.size && !l.open.length) die(`Semua subkonsep ${node} sudah locked di Ledger; tidak ada yang perlu diuji ulang.`)
-	const slots = composeSlots()
-	return { node, kind: "quiz", file: path.basename(file), composition: slots.map((s) => s.type), items: [], pending: { round: 1, slots, extra: l.open.length ? `## Fokus: hanya subkonsep yang belum locked (${l.open.join("; ")}). Field "concept" harus salah satu dari daftar itu.` : "" } }
+	const concepts = l.open.length ? l.open : [...new Set([...checklistOf(t, node).matchAll(/\b([A-Z]{1,2}\.\d+)\b/g)].map((m) => m[1]))]
+	// Ulang terarah (sebagian subkonsep sudah locked): satu butir transfer per subkonsep yang tersisa + satu esai, bukan kuis penuh.
+	const slots = l.open.length ? targetedSlots(l.open.length) : composeSlots(Math.random, concepts.length)
+	const focus = l.open.length ? `## Fokus: hanya subkonsep yang belum locked (${l.open.join("; ")}). Field "concept" harus salah satu dari daftar itu.
+` : ""
+	const cover = concepts.length ? `## Cakupan wajib
+Subkonsep: ${concepts.join(", ")}. Setiap subkonsep diuji minimal satu butir, dan minimal satu butirnya bersudut selain "definisi" (syarat locked). Field "angle" tiap butir harus sama dengan slotnya. Penugasan slot ke subkonsep terserah kamu, tapi pastikan tiap subkonsep dapat satu slot non-definisi. Set yang melanggar ditolak.` : ""
+	return { node, kind: "quiz", file: path.basename(file), composition: slots.map((s) => s.type), items: [], pending: { round: 1, slots, concepts, extra: focus + cover } }
 }
 
 function finalize(q) {
@@ -128,7 +140,9 @@ function finalize(q) {
 		const ns = nodeStatus(flat)
 		const mf = mapRel()
 		if (mf && fs.existsSync(mf)) fs.writeFileSync(mf, stamp(upsertRow(read(mf), "Node status (otomatis dari write_quiz)", NODE_HDR, [node, ns, `${results.filter((r) => r.ok).length}/${results.length} benar`, `[[${path.basename(file, ".md")}]]`], [0])))
-		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}\nEdge: jelaskan bagian lemah, tawarkan quiz-next lagi atau --remedial.`
+		const gaps = Object.entries(cs).filter(([c, st]) => st === "edge" && results.filter((r) => r.it.concept === c).every((r) => r.ok) && !results.some((r) => r.it.concept === c && r.ok && r.it.angle !== "definisi")).map(([c]) => c)
+		const gapNote = gaps.length ? `\nASSESSMENT_GAP: ${gaps.join(", ")} edge walau semua jawaban benar karena butir soalnya hanya bersudut "definisi". Ini celah soal, bukan celah pelajar. Jangan bebankan ke pelajar; jalankan quiz-next lagi hanya untuk subkonsep itu dan catat di ## Provenance (K-AMBIG).` : ""
+		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}${gapNote}\nEdge: jelaskan bagian lemah, tawarkan quiz-next lagi atau --remedial.`
 	}
 	q.done = true
 	qsave(q)
@@ -242,7 +256,7 @@ const CMDS = {
 		if (!p) die("Tidak ada soal yang menunggu.")
 		let out
 		try { out = extractJson(stdin()) } catch (e) { die("REJECT: JSON tidak terbaca. Kirim ulang hanya JSON.") }
-		const errs = validateItems(out.items, p.slots)
+		const errs = validateItems(out.items, p.slots, p.round === 1 && q.kind === "quiz" ? p.concepts ?? [] : [])
 		for (const [i, it] of (out.items ?? []).entries()) if (it?.options?.length > 4) errs.push(`soal ${i + 1}: maksimal 4 opsi`)
 		if (errs.length) die("REJECT:\n- " + errs.join("\n- ") + "\nPerbaiki semuanya lalu kirim ulang.")
 		for (const it of out.items) {
