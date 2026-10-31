@@ -14,7 +14,7 @@ const {
 	composeSlots, scoreEssay, scoreMulti, conceptStatus, extractJson, insertAfterNode, isAscii, lessonOnly, nodeSection, nodeStatus,
 	upsertRow, validateItems, transferEntry, transferFor, ledgerStatus, remedialStatus, resolvedFor, nodeStatusFromFile, consistencyIssues,
 	topicOf, checklistOf, flag, QUIZ_SYSTEM, GRADE_SYSTEM, CLARIFY_SYSTEM, AUDIT_SYSTEM, itemBlock, capstoneGate, shuffle,
-	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts,
+	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts, checklistIds,
 } = C
 
 const CWD = process.env.ALVAR_CWD || process.cwd()
@@ -70,7 +70,7 @@ const conceptLabel = (text, node, c) => {
 	const m = nodeSection(text, node)?.match(new RegExp("^### " + c.replace(".", "\\.") + "\\s+(.+?)\\s*$", "m"))
 	return m ? `${c} ${m[1].replace(/\|/g, "/")}` : c
 }
-const checkIds = (text, node) => [...new Set([...checklistOf(text, node).matchAll(/\b([A-Z]{1,2}\.\d+)\b/g)].map((m) => m[1]))]
+const checkIds = (text, node) => checklistIds(text, node)
 // Subkonsep di checklist yang belum punya baris Ledger dihitung terbuka (belum diuji), bukan dianggap locked.
 const OPEN_LOCKED = (text, node) => {
 	const l = ledgerStatus(text, node)
@@ -104,7 +104,7 @@ function startQuiz(node) {
 		return { node, kind: "remedial", file: path.basename(file), items: [], pending: { round: 3, slots, extra: `## Fokus: remedial untuk subkonsep yang belum locked. Field "concept" harus sama dengan slot.` } }
 	}
 	if (l.size && !l.open.length) die(`Semua subkonsep ${node} sudah locked di Ledger; tidak ada yang perlu diuji ulang.`)
-	const concepts = l.open.length ? l.open : [...new Set([...checklistOf(t, node).matchAll(/\b([A-Z]{1,2}\.\d+)\b/g)].map((m) => m[1]))]
+	const concepts = l.open.length ? l.open : checkIds(t, node)
 	// Ulang terarah (sebagian subkonsep sudah locked): satu butir transfer per subkonsep yang tersisa + satu esai, bukan kuis penuh.
 	const slots = l.open.length ? targetedSlots(l.open.length) : composeSlots(Math.random, concepts.length)
 	const focus = l.open.length ? `## Fokus: hanya subkonsep yang belum locked (${l.open.join("; ")}). Field "concept" harus salah satu dari daftar itu.
@@ -197,7 +197,7 @@ const CMDS = {
 		if (nodeSection(cur, node).replace(/^## Node .*$/m, "").trim()) die(`Bagian "## Node ${node}" sudah berisi materi. Tulis sekali; tambahan tidak diizinkan.`)
 		const missing = missingSubconcepts(cur, node, body)
 		if (missing.length) die(`Materi ${node} belum lengkap: subkonsep ${missing.join(", ")} ada di checklist tapi belum ada heading "### <id>". Tulis ulang seluruh materi.`)
-		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, ""), node, stripNodeHeading(body, node)))
+		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
 		say(`ok ${node} (${body.length} karakter). Tampilkan materi yang sama di chat.`)
 	},
 	"audit-ctx"() {
