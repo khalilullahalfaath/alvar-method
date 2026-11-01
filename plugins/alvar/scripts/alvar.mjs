@@ -14,7 +14,7 @@ const {
 	composeSlots, scoreEssay, scoreMulti, conceptStatus, extractJson, insertAfterNode, isAscii, lessonOnly, nodeSection, nodeStatus,
 	upsertRow, validateItems, transferEntry, transferFor, ledgerStatus, remedialStatus, resolvedFor, nodeStatusFromFile, consistencyIssues,
 	topicOf, checklistOf, flag, QUIZ_SYSTEM, GRADE_SYSTEM, CLARIFY_SYSTEM, AUDIT_SYSTEM, itemBlock, capstoneGate, shuffle,
-	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts, checklistIds,
+	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts, checklistIds, lessonStructureIssues,
 } = C
 
 const CWD = process.env.ALVAR_CWD || process.cwd()
@@ -197,6 +197,8 @@ const CMDS = {
 		if (nodeSection(cur, node).replace(/^## Node .*$/m, "").trim()) die(`Bagian "## Node ${node}" sudah berisi materi. Tulis sekali; tambahan tidak diizinkan.`)
 		const missing = missingSubconcepts(cur, node, body)
 		if (missing.length) die(`Materi ${node} belum lengkap: subkonsep ${missing.join(", ")} ada di checklist tapi belum ada heading "### <id>". Tulis ulang seluruh materi.`)
+		const structure = lessonStructureIssues(cur, node, body)
+		if (structure.length) die(`Materi ${node} ditolak (struktur): ${structure.join("; ")}. Perbaiki lalu tulis ulang seluruh materi.`)
 		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
 		say(`ok ${node} (${body.length} karakter). Tampilkan materi yang sama di chat.`)
 	},

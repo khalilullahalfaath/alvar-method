@@ -18,6 +18,7 @@ export const RULES = {
 	teach: `FASE TEACH (A = ${ALVAR}). Urutan wajib per node N:
 0. A next N -> ikuti langkahnya.
 1. Susun materi LENGKAP dulu, jangan tampil di chat. Tiap subkonsep di checklist wajib punya heading "### <id>".
+   Struktur per subkonsep (LEARNER.md "Narrative flow"): Intinya (hasil dulu, 2-4 kalimat, hanya istilah yang sudah known atau didefinisikan di tempat) -> blok formal berlabel tebal di awal baris (**Definisi L.1-D1.**, **Teorema L.1-T1.**, **Contoh L.1-C1.**; bukti memakai label teoremanya) -> Versi sederhana (maks dua paragraf: alasan, satu analogi beserta batasnya, jebakan; merujuk blok formal lewat token label persis, tanpa memparafrasekan pernyataan formal). Di akhir node tulis **Jelaskan balik** (teks tebal, bukan heading) berisi 2-3 butir bernomor; itu untuk pelajar secara offline, tidak dikuis dan tidak dicatat.
 2. A lesson N (stdin heredoc = seluruh materi, LaTeX boleh). Baru tampilkan materi yang sama di chat (ASCII).
 3. Spawn alvar-auditor (prompt: "node N"). Ada temuan = koreksi di chat dan file, audit ulang.
 4. Tanya "ada pertanyaan?". Pertanyaan ISI materi: A clar-q N (stdin = pertanyaan verbatim), spawn alvar-clarifier ("node N"), tampilkan jawabannya apa adanya. Logistik jawab sendiri.
