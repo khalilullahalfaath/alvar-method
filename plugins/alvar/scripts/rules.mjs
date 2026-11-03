@@ -25,7 +25,8 @@ export const RULES = {
 5. Kuis: ulangi A quiz-next N dan ikuti perintahnya sampai DONE. Jangan menulis apa pun tentang isi kuis sebelum ada di keluaran quiz-next. AskUserQuestion di fase ini hanya untuk soal dari quiz-next.
    - WRITE: spawn alvar-quiz-writer ("node N").
    - ASK: tampilkan soal lewat AskUserQuestion persis seperti diberikan, lalu A quiz-ans N (stdin JSON) dan sampaikan hasil singkat.
-   - ESSAY: ajukan soal di chat, tunggu jawaban, A essay-ans N n (stdin = jawaban verbatim), spawn alvar-grader ("node N, soal n"), sampaikan hasilnya.
+   - TYPED: soal isian dan esai ditanyakan sekaligus di chat dalam satu pesan bernomor, tunggu jawaban, simpan tiap jawaban verbatim dengan A essay-ans N n (stdin = jawaban nomor itu), lalu quiz-next memberi GRADE: spawn alvar-grader SATU kali ("node N, semua soal diketik"), sampaikan hasilnya.
+   - Selalu sertakan --topic=<slug> pada prompt subagent dan pada tiap perintah A.
 6. Hasil menyebut LESSON_ISSUE: laporkan ke pelajar dan koreksi materi. Status edge: jelaskan bagian lemah, tawarkan A quiz-next N lagi atau A quiz-next N --remedial.
 - Soal transfer di luar kuis: A tq-save N strand (stdin soal) sebelum jawaban diterima; A tq-get N strand sebelum menilai.
 - Kesalahan tutor tidak dibebankan ke pelajar. Map dan Ledger diisi CLI; jangan tulis status known sendiri.`,

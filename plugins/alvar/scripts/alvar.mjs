@@ -106,8 +106,10 @@ function startQuiz(node) {
 	if (l.size && !l.open.length) die(`Semua subkonsep ${node} sudah locked di Ledger; tidak ada yang perlu diuji ulang.`)
 	const concepts = l.open.length ? l.open : checkIds(t, node)
 	// Ulang terarah (sebagian subkonsep sudah locked): satu butir transfer per subkonsep yang tersisa + satu esai, bukan kuis penuh.
-	const slots = l.open.length ? targetedSlots(l.open.length) : composeSlots(Math.random, concepts.length)
-	const focus = l.open.length ? `## Fokus: hanya subkonsep yang belum locked (${l.open.join("; ")}). Field "concept" harus salah satu dari daftar itu.
+	// Terarah hanya bila SEBAGIAN subkonsep sudah locked. Node baru (belum ada baris Ledger) semua subkonsepnya "terbuka", tetapi itu kuis penuh (composeSlots).
+	const partial = l.open.length > 0 && l.open.length < l.size
+	const slots = partial ? targetedSlots(l.open.length) : composeSlots(Math.random, concepts.length)
+	const focus = partial ? `## Fokus: hanya subkonsep yang belum locked (${l.open.join("; ")}). Field "concept" harus salah satu dari daftar itu.
 ` : ""
 	const cover = concepts.length ? `## Cakupan wajib
 Subkonsep: ${concepts.join(", ")}. Setiap subkonsep diuji minimal satu butir, dan minimal satu butirnya bersudut selain "definisi" (syarat locked). Field "angle" tiap butir harus sama dengan slotnya. Penugasan slot ke subkonsep terserah kamu, tapi pastikan tiap subkonsep dapat satu slot non-definisi. Set yang melanggar ditolak.` : ""
@@ -160,6 +162,8 @@ function finalize(q) {
 	return line
 }
 
+// Soal yang diketik pelajar (esai, isian) dinilai penilai; soal pilihan (single, multi) dinilai kode.
+const isTyped = (it) => it.type === "essay" || it.type === "cloze"
 const strip = (i) => ({ n: i.n, q: i.it.question, multi: i.it.type === "multi", opts: i.it.options.map((o) => o.label) })
 
 const CMDS = {
@@ -273,7 +277,7 @@ const CMDS = {
 		for (const [i, it] of (out.items ?? []).entries()) if (it?.options?.length > 4) errs.push(`soal ${i + 1}: maksimal 4 opsi`)
 		if (errs.length) die("REJECT:\n- " + errs.join("\n- ") + "\nPerbaiki semuanya lalu kirim ulang.")
 		for (const it of out.items) {
-			if (it.type !== "essay") it.options = shuffle(it.options)
+			if (!isTyped(it)) it.options = shuffle(it.options)
 			q.items.push({ n: q.items.length + 1, round: p.round, it, ans: null })
 		}
 		q.issue = q.issue || out.lesson_issue || ""
@@ -289,13 +293,18 @@ const CMDS = {
 		if (q.pending) return say(`WRITE: spawn alvar-quiz-writer (prompt: "node ${node}"). Setelah selesai jalankan lagi quiz-next ${node}.`)
 		const round = q.items[q.items.length - 1].round
 		const cur = q.items.filter((i) => i.round === round)
-		const ch = cur.filter((i) => i.it.type !== "essay" && !i.ans)
+		const ch = cur.filter((i) => !isTyped(i.it) && !i.ans)
 		if (ch.length) {
 			state.quizOpen = true; saveState()
 			return say(`ASK: tampilkan lewat AskUserQuestion (maks 4 soal per panggilan, header "Q<n>", multiSelect sesuai multi, opsi persis urutan ini, tanpa Recommended; pelajar mengetik "tidak tahu" di Other kalau tidak tahu). Lalu: A quiz-ans ${node} dengan stdin JSON {"<n>":["label terpilih",...]}.\n${JSON.stringify(ch.slice(0, 4).map(strip))}`)
 		}
-		const es = cur.find((i) => i.it.type === "essay" && !i.ans)
-		if (es) return say(es.answerText ? `GRADE: spawn alvar-grader (prompt: "node ${node}, soal ${es.n}").` : `ESSAY ${es.n}: ajukan di chat persis: ${es.it.question}\nTunggu jawaban, lalu A essay-ans ${node} ${es.n} (stdin = jawaban verbatim), lalu quiz-next lagi.`)
+		// Soal diketik (isian lalu esai) ditanyakan sekaligus dalam satu pesan, jawabannya dinilai penilai dalam SATU panggilan.
+		const typed = cur.filter((i) => isTyped(i.it) && !i.ans)
+		if (typed.length) {
+			const missing = typed.filter((i) => !i.answerText)
+			if (missing.length) return say(`TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan tiap jawaban verbatim: A essay-ans ${node} <n> (stdin = jawaban nomor itu), satu per soal, lalu quiz-next lagi.\n${missing.map((i) => `${i.n}) ${i.it.question}`).join("\n")}`)
+			return say(`GRADE: spawn alvar-grader SATU kali (prompt: "node ${node}, semua soal diketik"). Soal: ${typed.map((i) => i.n).join(", ")}.`)
+		}
 		const wrong = cur.filter((i) => !i.ans.ok)
 		if (round === 1 && wrong.length) {
 			const angles = ["penerapan kasus baru", "contoh tandingan", "membedakan"]
@@ -308,7 +317,7 @@ const CMDS = {
 	"quiz-ans"() {
 		const node = pos[0], q = qload(node), given = JSON.parse(stdin()), out = []
 		for (const [n, sel] of Object.entries(given)) {
-			const i = q.items.find((x) => x.n === +n && x.it.type !== "essay" && !x.ans)
+			const i = q.items.find((x) => x.n === +n && !isTyped(x.it) && !x.ans)
 			if (!i) { out.push(`Q${n}: diabaikan (tidak ada / sudah dijawab)`); continue }
 			const it = i.it, L = (k) => String.fromCharCode(97 + k)
 			const arr = [].concat(sel).map(String)
@@ -327,17 +336,42 @@ const CMDS = {
 		say(out.join("\n") + `\nSampaikan hasil + penjelasan singkat, lalu quiz-next ${node}.`)
 	},
 	"essay-ans"() {
-		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && x.it.type === "essay")
-		if (!i) die("Soal esai tidak ditemukan.")
+		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
+		if (!i) die("Soal esai atau isian tidak ditemukan.")
 		i.answerText = stdin().trim(); qsave(q); say("ok")
 	},
+	// Penilaian sekali jalan untuk semua soal diketik (isian dan esai) yang jawabannya sudah disimpan dan belum dinilai.
+	"typed-ctx"() {
+		const q = qload(pos[0]), todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
+		if (!todo.length) die("Tidak ada jawaban diketik yang menunggu dinilai (essay-ans dulu).")
+		const body = todo.map((x) => `### Soal ${x.n} (${x.it.type === "cloze" ? "isian" : "esai"})\n${x.it.question}\nRubrik: ${JSON.stringify(x.it.rubric)}\nContoh jawaban: ${x.it.model_answer}\nJawaban pelajar: ${x.answerText}`).join("\n\n")
+		say(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${nodeSection(read(path.join(A, "sessions", q.file)), q.node)}\n\n## Soal yang dinilai\n${body}`)
+	},
+	"typed-save"() {
+		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
+		if (!Array.isArray(rs) || !rs.length) die("REJECT: JSON harus berisi results[] satu entri per soal.")
+		const todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
+		const missing = todo.filter((x) => !rs.some((r) => +r.n === x.n)).map((x) => x.n)
+		if (missing.length) die(`REJECT: soal ${missing.join(", ")} belum dinilai. Kirim ulang results[] lengkap.`)
+		const out = []
+		for (const r of rs) {
+			const i = todo.find((x) => x.n === +r.n)
+			if (!i) { out.push(`Soal ${r.n}: diabaikan (tidak menunggu penilaian)`); continue }
+			const sc = scoreEssay(r.criteria)
+			i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: r.criteria, feedback: r.feedback }
+			out.push(`${i.it.type === "cloze" ? "Isian" : "Esai"} ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(r.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${r.feedback ?? ""}`)
+		}
+		qsave(q)
+		const txt = out.join("\n\n")
+		say(isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?"))
+	},
 	"essay-ctx"() {
-		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && x.it.type === "essay")
+		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
 		say(`${GRADE_SYSTEM}\n\n## Materi\n${nodeSection(read(path.join(A, "sessions", q.file)), q.node)}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
 	},
 	"essay-save"() {
-		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && x.it.type === "essay")
+		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
 		const g = extractJson(stdin()), sc = scoreEssay(g.criteria)
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
