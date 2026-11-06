@@ -53,6 +53,39 @@ function consistencyGate() {
 	if (issues.length) die(`Ditolak: Ledger, sesi, dan map tidak sinkron. Perbaiki dulu:\n- ${issues.join("\n- ")}`)
 }
 
+// Gate DAG: node baru (belum ada materi) ditolak bila ada pendahulu di diagram mermaid yang belum known/locked di map.
+// Lewati dengan --lewati (dicatat di state.json); hanya atas persetujuan pelajar.
+function dagEdges(text) {
+	const edges = []
+	for (const line of text.split("\n")) {
+		if (!line.includes("-->")) continue
+		const segs = line.split("-->").map((s) => s.replace(/^\s*\|[^|]*\|/, "").trim())
+		const ids = segs.map((s) => s.split("&").map((p) => p.trim().match(/^([A-Za-z][A-Za-z0-9]*)/)?.[1]).filter(Boolean))
+		for (let i = 0; i + 1 < ids.length; i++) for (const a of ids[i]) for (const b of ids[i + 1]) edges.push([a, b])
+	}
+	return edges
+}
+function dagGate(file, node) {
+	const t = read(file)
+	if (nodeSection(t, node).replace(/^## Node .*$/m, "").trim()) return // sudah diajarkan: gate hanya untuk node baru
+	const declared = t.match(/^nodes:\s*\[(.*)\]/m)?.[1].split(",").map((s) => s.trim()).filter(Boolean)
+	if (!declared?.includes(node)) return
+	const mapFile = path.join(A, "maps", (TOPIC ?? topicOf(t)) + ".md")
+	let m = ""
+	try { m = read(mapFile) } catch {}
+	const sec = m.split(/^## Node status.*$/m)[1]?.split(/^## /m)[0] ?? ""
+	const ok = new Set([...sec.matchAll(/^\|\s*([A-Za-z0-9]+)\s*\|\s*(known|locked)\s*\|/gim)].map((r) => r[1]))
+	const preds = [...new Set(dagEdges(t).filter(([a, b]) => b === node && declared.includes(a)).map(([a]) => a))]
+	const open = preds.filter((p) => !ok.has(p))
+	if (!open.length) return
+	if (args.includes("--lewati")) {
+		state.skipped = { ...(state.skipped ?? {}), [node]: open }
+		saveState()
+		return say(`[DAG dilewati atas persetujuan pelajar: ${node} sebelum ${open.join(", ")}. Catat di Catatan sesi.]`)
+	}
+	die(`Ditolak oleh DAG: ${node} bergantung pada ${open.join(", ")} yang belum known/locked (panah masuk: ${preds.join(", ")}). Ajarkan itu dulu; bila pelajar menyetujui melewatinya, ulangi dengan --lewati.`)
+}
+
 // Instruksi CLI untuk tutor: nama tool pi diganti perintah Claude Code.
 const toCC = (s) => s.replace(/write_lesson/g, "A lesson").replace(/audit_lesson\("([^"]+)"\)/g, "alvar-auditor (node $1)").replace(/write_quiz/g, "A quiz-next")
 
@@ -188,6 +221,7 @@ const CMDS = {
 	next() {
 		const f = needFile()
 		const t = read(f)
+		dagGate(f, pos[0])
 		const readTopic = (tp) => { const g = sessionFile(tp); return g ? read(g) : null }
 		say(`Langkah berikutnya ${pos[0]}: ${toCC(nextLessonStep(t, pos[0], audited(f, pos[0])))}${equivalentNote(t, pos[0], readTopic)}`)
 	},
@@ -198,6 +232,7 @@ const CMDS = {
 		const body = stdin()
 		if (!body.trim()) die("Materi kosong; tidak ada yang ditulis.")
 		const cur = read(f)
+		dagGate(f, node)
 		if (nodeSection(cur, node).replace(/^## Node .*$/m, "").trim()) die(`Bagian "## Node ${node}" sudah berisi materi. Tulis sekali; tambahan tidak diizinkan.`)
 		const missing = missingSubconcepts(cur, node, body)
 		if (missing.length) die(`Materi ${node} belum lengkap: subkonsep ${missing.join(", ")} ada di checklist tapi belum ada heading "### <id> <judul>". Tulis ulang seluruh materi.`)

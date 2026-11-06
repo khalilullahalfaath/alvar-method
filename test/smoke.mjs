@@ -11,11 +11,13 @@ const run = (input, ...a) => { try { return execFileSync("node", [cli, ...a], { 
 const S = path.join(cwd, ".alvar", "sessions"), M = path.join(cwd, ".alvar", "maps")
 fs.mkdirSync(S, { recursive: true }); fs.mkdirSync(M, { recursive: true })
 const tbl = (h) => `| ${h.join(" | ")} |\n|${h.map(() => "---").join("|")}|\n`
-fs.writeFileSync(path.join(S, "2026-01-01-demo.md"), `---\ntopic: demo\nplan_version: 1\n---\n# Sesi\n## Plan\n- **A**: A.1 satu; A.2 dua\n## Ledger\n${tbl(["subkonsep", "diajarkan di (anchor)", "item kuis", "tipe bukti (recognition/transfer)", "status"])}## Provenance\n${tbl(["id", "bagian materi", "evidence terdampak", "status"])}`)
+fs.writeFileSync(path.join(S, "2026-01-01-demo.md"), `---\ntopic: demo\nplan_version: 1\nnodes: [A, B]\n---\n# Sesi\n## Plan\nflowchart TD\n  A["A. satu"] --> B\n- **A**: A.1 satu; A.2 dua\n## Ledger\n${tbl(["subkonsep", "diajarkan di (anchor)", "item kuis", "tipe bukti (recognition/transfer)", "status"])}## Provenance\n${tbl(["id", "bagian materi", "evidence terdampak", "status"])}`)
 fs.writeFileSync(path.join(M, "demo.md"), `---\nupdated: 2026-01-01\n---\n# Map\n## Node status (otomatis dari write_quiz)\n${tbl(["node", "status", "bukti", "sesi"])}`)
 
 assert.match(run("", "phase", "teach"), /FASE TEACH/)
 assert.match(run("", "next", "A"), /alvar lesson|A lesson/)
+assert.match(run("", "next", "B"), /Ditolak oleh DAG.*A/)            // gate DAG: pendahulu A belum known
+assert.match(run("", "next", "B", "--lewati"), /DAG dilewati/)       // dilewati eksplisit
 const JB = "\n\n**Jelaskan balik**\n1. Mengapa?\n2. Apa yang rusak bila syaratnya dibuang?"
 assert.match(run("### A.1 Satu\nisi" + JB, "lesson", "A"), /belum lengkap/)          // gate subkonsep
 assert.match(run("### A.1\nisi\n### A.2\nisi", "lesson", "A"), /heading subkonsep tanpa judul/) // gate struktur: judul wajib
