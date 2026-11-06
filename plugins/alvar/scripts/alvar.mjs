@@ -14,7 +14,7 @@ const {
 	composeSlots, scoreEssay, scoreMulti, conceptStatus, extractJson, insertAfterNode, isAscii, lessonOnly, nodeSection, nodeStatus,
 	upsertRow, validateItems, transferEntry, transferFor, ledgerStatus, remedialStatus, resolvedFor, nodeStatusFromFile, consistencyIssues,
 	topicOf, checklistOf, flag, QUIZ_SYSTEM, GRADE_SYSTEM, CLARIFY_SYSTEM, AUDIT_SYSTEM, itemBlock, capstoneGate, shuffle,
-	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts, checklistIds, lessonStructureIssues,
+	ensureNodeHeading, nextLessonStep, equivalentNote, stripNodeHeading, missingSubconcepts, checklistIds, lessonStructureIssues, stripLearnerNotes,
 } = C
 
 const CWD = process.env.ALVAR_CWD || process.cwd()
@@ -200,7 +200,7 @@ const CMDS = {
 		const cur = read(f)
 		if (nodeSection(cur, node).replace(/^## Node .*$/m, "").trim()) die(`Bagian "## Node ${node}" sudah berisi materi. Tulis sekali; tambahan tidak diizinkan.`)
 		const missing = missingSubconcepts(cur, node, body)
-		if (missing.length) die(`Materi ${node} belum lengkap: subkonsep ${missing.join(", ")} ada di checklist tapi belum ada heading "### <id>". Tulis ulang seluruh materi.`)
+		if (missing.length) die(`Materi ${node} belum lengkap: subkonsep ${missing.join(", ")} ada di checklist tapi belum ada heading "### <id> <judul>". Tulis ulang seluruh materi.`)
 		const structure = lessonStructureIssues(cur, node, body)
 		if (structure.length) die(`Materi ${node} ditolak (struktur): ${structure.join("; ")}. Perbaiki lalu tulis ulang seluruh materi.`)
 		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
@@ -210,7 +210,7 @@ const CMDS = {
 		const f = needFile(), node = pos[0], t = read(f), lesson = nodeSection(t, node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
 		const done = resolvedFor(t, node)
-		say(`${AUDIT_SYSTEM}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${lesson}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
+		say(`${AUDIT_SYSTEM}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
 	},
 	"audit-save"() {
 		const f = needFile(), node = pos[0]
@@ -251,7 +251,7 @@ const CMDS = {
 		const prereq = answer.match(/^PREREQ:\s*(.+)$/m)?.[1]
 		const shown = answer.replace(/^(LESSON_ISSUE|PREREQ):.*$/gm, "").trim()
 		const n = (nodeSection(t, node).match(/\*\*Klarifikasi /g) ?? []).length + 1
-		t = insertAfterNode(t, node, `**Klarifikasi ${node} (${n})**\n\n> Pelajar:\n${question.split(/\r?\n/).map((l) => `> ${l}`).join("\n")}\n\n${shown}`)
+		t = insertAfterNode(t, node, `**Klarifikasi ${node} (${n})** ^klar-${node}-${n}\n\n> Pelajar:\n${question.split(/\r?\n/).map((l) => `> ${l}`).join("\n")}\n\n${shown}`)
 		if (issue) t = flag(t, node, "clarify", issue)[0]
 		fs.writeFileSync(f, t)
 		delete state.clarQ; saveState()
@@ -266,7 +266,7 @@ const CMDS = {
 		if (!p) die("Tidak ada soal yang perlu ditulis.")
 		const { t, lesson } = quizGate(node, q.kind === "remedial")
 		const used = q.items.map((i) => i.it.question)
-		say(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${lesson}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`)
+		say(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${stripLearnerNotes(lesson)}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`)
 	},
 	"quiz-save"() {
 		const q = qload(pos[0]), p = q.pending
@@ -345,7 +345,7 @@ const CMDS = {
 		const q = qload(pos[0]), todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		if (!todo.length) die("Tidak ada jawaban diketik yang menunggu dinilai (essay-ans dulu).")
 		const body = todo.map((x) => `### Soal ${x.n} (${x.it.type === "cloze" ? "isian" : "esai"})\n${x.it.question}\nRubrik: ${JSON.stringify(x.it.rubric)}\nContoh jawaban: ${x.it.model_answer}\nJawaban pelajar: ${x.answerText}`).join("\n\n")
-		say(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${nodeSection(read(path.join(A, "sessions", q.file)), q.node)}\n\n## Soal yang dinilai\n${body}`)
+		say(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
 	},
 	"typed-save"() {
 		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
@@ -368,7 +368,7 @@ const CMDS = {
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
-		say(`${GRADE_SYSTEM}\n\n## Materi\n${nodeSection(read(path.join(A, "sessions", q.file)), q.node)}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
+		say(`${GRADE_SYSTEM}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
 	},
 	"essay-save"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))

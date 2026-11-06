@@ -16,16 +16,21 @@ fs.writeFileSync(path.join(M, "demo.md"), `---\nupdated: 2026-01-01\n---\n# Map\
 
 assert.match(run("", "phase", "teach"), /FASE TEACH/)
 assert.match(run("", "next", "A"), /alvar lesson|A lesson/)
-assert.match(run("### A.1\nisi", "lesson", "A"), /belum lengkap/)          // gate subkonsep
-assert.match(run("### A.1\nisi\n### A.2\nisi", "lesson", "A"), /^ok A/)
+const JB = "\n\n**Jelaskan balik**\n1. Mengapa?\n2. Apa yang rusak bila syaratnya dibuang?"
+assert.match(run("### A.1 Satu\nisi" + JB, "lesson", "A"), /belum lengkap/)          // gate subkonsep
+assert.match(run("### A.1\nisi\n### A.2\nisi", "lesson", "A"), /heading subkonsep tanpa judul/) // gate struktur: judul wajib
+assert.match(run("### A.1 Satu\nisi\n### A.2 Dua\nisi", "lesson", "A"), /Jelaskan balik/)       // gate struktur: teach-back wajib
+assert.match(run("### A.1 Satu\nisi\n#### 1. Bagian\nisi\n### A.2 Dua\nisi" + JB, "lesson", "A"), /^ok A/) // #### tidak dianggap heading subkonsep
 assert.match(run("", "quiz-next", "A"), /belum lolos audit/)                 // gate audit
 assert.match(run('{"issues":[]}', "audit-save", "A"), /tidak ada masalah fakta/)
 assert.match(run("", "quiz-next", "A"), /WRITE/)
 
 const qf = path.join(cwd, ".alvar", "quiz", "A.json")
-const mk = (slots) => ({ lesson_issue: "", items: slots.map((s) => s.type === "essay"
-	? { type: "essay", concept: "A.1", angle: s.angle, question: "Jelaskan A.1 dengan contoh.", rubric: ["a", "b"], model_answer: "x" }
-	: { type: s.type, concept: s.concept ?? "A.1", angle: s.angle, question: "Soal " + s.type, options: ["a", "b", "c", "d"].map((v) => ({ label: `Pernyataan lengkap tentang konsep nomor ${v} dalam materi`, value: v, ...((s.type === "multi" ? ["a", "b"] : ["a"]).includes(v) ? {} : { misconception: "salah paham " + v }) })), correct: s.type === "multi" ? ["a", "b"] : ["a"], explanation: "pen" }) })
+const mk = (slots) => ({ lesson_issue: "", items: slots.map((s, i) => s.type === "essay"
+	? { type: "essay", concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Jelaskan A.1 dengan contoh.", rubric: ["a", "b"], model_answer: "x" }
+	: s.type === "cloze"
+	? { type: "cloze", concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Nilai ____ adalah hasil dari konsep A.1.", rubric: ["a"], model_answer: "x" }
+	: { type: s.type, concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Soal " + s.type, options: ["a", "b", "c", "d"].map((v) => ({ label: `Pernyataan lengkap tentang konsep nomor ${v} dalam materi`, value: v, ...((s.type === "multi" ? ["a", "b"] : ["a"]).includes(v) ? {} : { misconception: "salah paham " + v }) })), correct: s.type === "multi" ? ["a", "b"] : ["a"], explanation: "pen" }) })
 const slotsOf = () => JSON.parse(fs.readFileSync(qf, "utf8")).pending.slots
 assert.match(run(JSON.stringify({ items: [] }), "quiz-save", "A"), /REJECT/)
 assert.match(run(JSON.stringify(mk(slotsOf())), "quiz-save", "A"), /^ok/)
@@ -35,21 +40,27 @@ assert.match(nxt, /^ASK/)
 const items = JSON.parse(nxt.trim().split("\n").pop())
 const wrongAns = Object.fromEntries(items.map((i) => [i.n, ["tidak tahu"]]))
 assert.match(run(JSON.stringify(wrongAns), "quiz-ans", "A"), /TIDAK TAHU/)
-for (let g = 0; g < 4 && !/^ESSAY/.test(nxt); g++) {          // soal pilihan bisa 5 -> dua batch AskUserQuestion
+// soal diketik (isian dan esai) ditanyakan sekaligus; jawab semuanya, minta penilaian, simpan hasil gagal
+const doTyped = (r) => {
+	const ns = [...r.matchAll(/^(\d+)\) /gm)].map((m) => m[1])
+	for (const n of ns) run("jawaban saya", "essay-ans", "A", n)
+	assert.match(run("", "quiz-next", "A"), /^GRADE/)
+	const results = ns.map((n) => ({ n: +n, pass: false, criteria: [{ criterion: "a", core: true, met: false, evidence: "-" }], feedback: "kurang" }))
+	return run(JSON.stringify({ results }), "typed-save", "A")
+}
+for (let g = 0; g < 4 && !/^TYPED/.test(nxt); g++) {          // soal pilihan bisa 5 -> dua batch AskUserQuestion
 	nxt = run("", "quiz-next", "A")
 	if (/^ASK/.test(nxt)) run(JSON.stringify(Object.fromEntries(JSON.parse(nxt.trim().split("\n").pop()).map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A")
 }
-assert.match(nxt, /^ESSAY/)
-const en = nxt.match(/^ESSAY (\d+)/)[1]
-run("jawaban esai saya", "essay-ans", "A", en)
-assert.match(run(JSON.stringify({ pass: false, criteria: [{ criterion: "a", core: true, met: false, evidence: "-" }], feedback: "kurang" }), "essay-save", "A", en), /BELUM LULUS/)
+assert.match(nxt, /^TYPED/)
+assert.match(doTyped(nxt), /BELUM LULUS/)
 assert.match(run("", "quiz-next", "A"), /pengganti/)                         // putaran 2
 assert.match(run(JSON.stringify(mk(slotsOf())), "quiz-save", "A"), /^ok/)
 let r
 for (let g = 0; g < 6; g++) {
 	r = run("", "quiz-next", "A")
 	if (/^ASK/.test(r)) { const it = JSON.parse(r.trim().split("\n").pop()); run(JSON.stringify(Object.fromEntries(it.map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A") }
-	else if (/^ESSAY/.test(r)) { const n = r.match(/^ESSAY (\d+)/)[1]; run("x", "essay-ans", "A", n); run(JSON.stringify({ criteria: [{ criterion: "a", core: true, met: false, evidence: "-" }], feedback: "f" }), "essay-save", "A", n) }
+	else if (/^TYPED/.test(r)) doTyped(r)
 	else break
 }
 assert.match(r, /^DONE/)
