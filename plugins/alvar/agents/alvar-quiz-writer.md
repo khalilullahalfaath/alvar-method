@@ -11,5 +11,5 @@ Langkah:
 2. Tulis JSON sesuai aturan, kirim lewat stdin ke: node "${CLAUDE_PLUGIN_ROOT}/scripts/alvar.mjs" quiz-save <node>
    Perhatikan "Cakupan wajib": tiap subkonsep diuji minimal satu butir, dan minimal satu butirnya bersudut selain "definisi". Pakai "angle" persis seperti slot. Sebelum mengirim, cek sendiri tabel subkonsep -> slot -> angle: tidak boleh ada subkonsep yang tanpa slot atau hanya dapat slot "definisi".
    Jenis slot: single, multi, cloze (isian singkat dengan "____" di pertanyaan, tanpa opsi, rubric 1-2 kriteria, model_answer), dan essay. Satu butir per slot, jenis dan urutan persis seperti slot.
-3. Jika keluaran diawali REJECT, perbaiki dan kirim ulang (maks 2 kali).
+3. Jika keluaran diawali REJECT, perbaiki berdasarkan pesan itu saja dan kirim ulang (maks 2 kali). Jangan membaca kode plugin atau core untuk menafsirkan pesannya. LaTeX di JSON boleh ditulis dengan backslash tunggal; CLI menggandakannya.
 4. Jawab HANYA 'ok' atau pesan galat. JANGAN menampilkan soal atau kunci.

@@ -55,6 +55,16 @@ const needPaged = (key, ctxCmd) => {
 }
 const donePaged = (key) => { if (state.paged?.[key]) { delete state.paged[key]; saveState() } }
 const today = () => new Date().toISOString().slice(0, 10)
+// JSON dari subagent memuat LaTeX. Backslash tunggal membuat JSON tak valid (\hat, \{) atau, lebih buruk, valid tapi rusak diam-diam
+// (\frac -> form feed + "rac", \theta -> tab + "heta"). Maka backslash yang memulai perintah LaTeX digandakan sebelum parse.
+// Dipertahankan: \\ yang sudah ganda, \" \/, \uXXXX, dan \n \t \r \b \f tunggal yang tidak diikuti huruf kecil (escape JSON sungguhan).
+function fixLatexEscapes(s) {
+	return s.replace(/\\\\|\\(u[0-9a-fA-F]{4}|["\/]|[nrtbf](?![a-z]))|\\/g, (m, keep) => (m === "\\\\" || keep ? m : "\\\\"))
+}
+const readJson = () => {
+	const raw = stdin()
+	try { return extractJson(fixLatexEscapes(raw)) } catch { die('REJECT: JSON tidak terbaca. Kirim ulang HANYA satu objek JSON (LaTeX boleh dengan backslash tunggal; CLI menggandakannya). Jangan membaca kode plugin; perbaiki dari pesan ini.') }
+}
 
 const state = (() => { try { return JSON.parse(fs.readFileSync(path.join(A, "state.json"), "utf8")) } catch { return {} } })()
 const saveState = () => { fs.mkdirSync(A, { recursive: true }); fs.writeFileSync(path.join(A, "state.json"), JSON.stringify(state)) }
@@ -148,7 +158,7 @@ const AUDIT_CC = langify(AUDIT_SYSTEM)
 // ponytail: rentang huruf Yunani ikut tertolak; bila pelajar memakai bahasa Yunani, keluarkan U+0391-U+03C9 dari pola.
 const UNICODE_MATH = /[∀-⋿←-⇿Α-ω²³¹⁰-₟×÷√]/
 const GREEK = "alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Sigma|Phi|Psi|Omega"
-const SYM = { cdot: "*", times: "x", le: "<=", leq: "<=", ge: ">=", geq: ">=", ne: "!=", neq: "!=", approx: "~=", to: "->", rightarrow: "->", Rightarrow: "=>", infty: "inf", sum: "sum", prod: "prod", int: "int", in: "in", notin: "not in", subseteq: "subset", cup: "union", cap: "intersect", ldots: "...", cdots: "...", pm: "+/-", log: "log", ln: "ln", exp: "exp", max: "max", min: "min", lim: "lim" }
+const SYM = { cdot: "*", times: "x", le: "<=", leq: "<=", ge: ">=", geq: ">=", ne: "!=", neq: "!=", approx: "~=", to: "->", rightarrow: "->", Rightarrow: "=>", infty: "inf", sum: "sum", prod: "prod", int: "int", in: "in", notin: "not in", subseteq: "subset", cup: "union", cap: "intersect", ldots: "...", cdots: "...", propto: "~", mid: "|", neg: "not", forall: "for all", exists: "exists", partial: "d", nabla: "grad", pm: "+/-", log: "log", ln: "ln", exp: "exp", max: "max", min: "min", lim: "lim" }
 function toAscii(s) {
 	if (!s || !s.includes("$")) return s
 	return String(s).replace(/\$\$([\s\S]+?)\$\$|\$([^$]+)\$/g, (_, a, b) => {
@@ -165,8 +175,9 @@ function toAscii(s) {
 		} while (t !== prev)
 		return t.replace(/\\left|\\right/g, "").replace(new RegExp(`\\\\(${GREEK})\\b`, "g"), "$1")
 			.replace(/\\([A-Za-z]+)\{([^{}]*)\}/g, (m, c, x) => `${SYM[c] ?? c}(${x})`)   // \hat{y} -> hat(y)
-			.replace(/\\([A-Za-z]+)/g, (m, c) => SYM[c] ?? c)
-			.replace(/\\[{}]/g, (m) => m[1]).replace(/\\[,;:! ]/g, " ").replace(/[{}]/g, "")
+			// Spasi hanya bila perintah menempel ke huruf/angka/perintah lain: \lambda\propto -> "lambda ~", \alpha_b tetap "alpha_b".
+			.replace(/\\([A-Za-z]+)/g, (m, c, off, str) => `${/[A-Za-z0-9]/.test(str[off - 1] ?? "") ? " " : ""}${SYM[c] ?? c}${/[A-Za-z0-9\\]/.test(str[off + m.length] ?? "") ? " " : ""}`)
+			.replace(/\\[{}]/g, (m) => m[1]).replace(/\\[,;:! ]/g, " ").replace(/[{}]/g, "").replace(/ {2,}/g, " ").trim()
 	}).replace(/\\\$/g, "$")
 }
 // Notasi matematika yang lolos sebagai ASCII di luar $...$ (heuristik yang sama dengan hook latex-check).
@@ -176,7 +187,8 @@ const asciiMath = (s) => {
 }
 // Umpan balik grader masuk log file sesi, jadi wajib LaTeX. Bukti (evidence) mengutip jawaban pelajar dan tidak diperiksa.
 const gradeLatexGate = (rs) => {
-	const bad = rs.filter((r) => asciiMath(r.feedback) || (r.criteria ?? []).some((c) => asciiMath(c.criterion))).map((r) => r.n)
+	const off = (s) => asciiMath(s) || UNICODE_MATH.test(String(s ?? ""))
+	const bad = rs.filter((r) => off(r.feedback) || (r.criteria ?? []).some((c) => off(c.criterion))).map((r) => r.n)
 	if (bad.length) die(`REJECT: umpan balik soal ${bad.join(", ")} memuat notasi matematika ASCII di luar $...$. Spawn ulang alvar-grader dengan pesan ini; kutipan jawaban pelajar ditulis dalam backtick.`)
 }
 const QUIZ_CC = latexify(QUIZ_SYSTEM) + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
@@ -275,7 +287,7 @@ function finalize(q) {
 		if (mf && fs.existsSync(mf)) fs.writeFileSync(mf, stamp(upsertRow(read(mf), "Node status (otomatis dari write_quiz)", NODE_HDR, [node, ns, `${results.filter((r) => r.ok).length}/${results.length} benar`, `[[${path.basename(file, ".md")}]]`], [0])))
 		const gaps = Object.entries(cs).filter(([c, st]) => st === "edge" && results.filter((r) => r.it.concept === c).every((r) => r.ok) && !results.some((r) => r.it.concept === c && r.ok && r.it.angle !== "definisi")).map(([c]) => c)
 		const gapNote = gaps.length ? `\nASSESSMENT_GAP: ${gaps.join(", ")} edge walau semua jawaban benar karena butir soalnya hanya bersudut "definisi". Ini celah soal, bukan celah pelajar. Jangan bebankan ke pelajar; jalankan A quiz-next ${node} --ulang hanya untuk subkonsep itu dan catat di ## Provenance (K-AMBIG).` : ""
-		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}${gapNote}\nEdge: jelaskan bagian lemah, tawarkan A quiz-next ${node} --ulang atau --remedial.`
+		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}${gapNote}${ns === "known" || ns === "locked" ? "" : `\nEdge: jelaskan bagian lemah, tawarkan A quiz-next ${node} --ulang atau --remedial.`}`
 	}
 	q.done = true
 	qsave(q)
@@ -387,7 +399,7 @@ const CMDS = {
 		const f = needFile(), node = pos[0]
 		let t = read(f)
 		const lesson = nodeSection(t, node)
-		const out = extractJson(stdin())
+		const out = readJson()
 		const all = Array.isArray(out.issues) ? out.issues : []
 		state.rounds ??= {}
 		const k = akey(f, node), rounds = state.rounds[k] ?? 0
@@ -447,7 +459,8 @@ const CMDS = {
 		const q = qload(pos[0]), p = q.pending
 		if (!p) die("Tidak ada soal yang menunggu.")
 		let out
-		try { out = extractJson(stdin()) } catch (e) { die("REJECT: JSON tidak terbaca. Kirim ulang hanya JSON.") }
+		out = readJson()
+		if (!Array.isArray(out?.items)) die('REJECT: JSON harus berbentuk {"lesson_issue": "...", "items": [ ... ]} dengan satu butir per slot. Jangan membaca kode plugin; perbaiki dari pesan ini.')
 		const errs = validateItems(out.items, p.slots, p.round === 1 && q.kind === "quiz" ? p.concepts ?? [] : [])
 		for (const [i, it] of (out.items ?? []).entries()) {
 			if (it?.options?.length > 4) errs.push(`soal ${i + 1}: maksimal 4 opsi`)
@@ -538,7 +551,7 @@ const CMDS = {
 	},
 	"typed-save"() {
 		needPaged(`typed:${pos[0]}`, `typed-ctx ${pos[0]}`)
-		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
+		const q = qload(pos[0]), g = readJson(), rs = Array.isArray(g) ? g : g.results
 		if (!Array.isArray(rs) || !rs.length) die("REJECT: JSON harus berisi results[] satu entri per soal.")
 		const todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		const missing = todo.filter((x) => !rs.some((r) => +r.n === x.n)).map((x) => x.n)
@@ -566,7 +579,7 @@ const CMDS = {
 		needPaged(`essay:${pos[0]}:${pos[1]}`, `essay-ctx ${pos[0]} ${pos[1]}`)
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
-		const g = extractJson(stdin()), sc = scoreEssay(g.criteria)
+		const g = readJson(), sc = scoreEssay(g.criteria)
 		gradeLatexGate([{ n: pos[1], ...g }])
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
 		qsave(q)
