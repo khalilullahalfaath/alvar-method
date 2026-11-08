@@ -96,4 +96,15 @@ assert.equal(hook("prompt"), "")                       // aturan fase sudah disu
 assert.match(hook("start"), /Alvar aktif[\s\S]*node terakhir A[\s\S]*A next A --topic=demo/) // lanjutan setelah /clear
 assert.match(hook("prompt"), /FASE TEACH/)             // setelah compact/resume, disuntik lagi sekali
 assert.equal(hook("prompt"), "")
+// --- pengaturan pelajar dari frontmatter LEARNER.md ---
+const setLearner = (fm) => fs.writeFileSync(path.join(cwd, ".alvar", "LEARNER.md"), `---\n${fm}\n---\n# Learner\n`)
+const clar = (ans) => { run("apa itu?", "clar-q", "A"); return run(ans, "clar-save", "A") }
+assert.match(clar("Jawab $x^{2}$."), /tersimpan di file sesi[\s\S]*Obsidian/)            // tanpa frontmatter: bawaan Obsidian
+setLearner("language: English\nchat_math: latex   # komentar diabaikan\nreader: chat")
+assert.match(clar("Jawab $x^{2}$."), /Tampilkan jawaban ini[\s\S]*\$x\^\{2\}\$/)         // reader chat + LaTeX: tampil apa adanya
+assert.match(run("", "plan-ctx"), /bahasa materi \(English\)/)                          // bahasa keluaran subagent
+setLearner("language: English\nchat_math: ascii\nreader: chat")
+assert.match(clar("Jawab $x^{2}$."), /Tampilkan jawaban ini[\s\S]*Jawab x\^2\./)         // reader chat + ASCII: dikonversi
+setLearner("reader: editor")
+assert.match(clar("Jawab."), /membacanya di editor Markdown/)
 console.log("smoke ok")

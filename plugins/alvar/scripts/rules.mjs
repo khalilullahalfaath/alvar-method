@@ -19,9 +19,9 @@ export const RULES = {
 	teach: `FASE TEACH (A = ${ALVAR}). Urutan wajib per node N:
 0. A next N -> ikuti langkahnya.
 1. Materi ditulis subagent alvar-lesson-writer (prompt: "node N --topic=<slug> draf=<folder draf di scratchpad>"; dua node sekaligus boleh). Format materi hanya ada di keluaran A format (preferensi dan alasannya di LEARNER.md); jangan menyalin atau meringkasnya ke prompt, dan jangan menulis materi sendiri.
-2. A lesson N < berkas draf (seluruh materi). Materi TIDAK ditampilkan di chat, juga bukan ringkasannya: pelajar membacanya di Obsidian. Cukup satu baris bahwa materi N siap.
+2. A lesson N < berkas draf (seluruh materi). Apa yang ditampilkan di chat ditentukan keluarannya (mengikuti "reader" di LEARNER.md); ikuti persis, jangan menambah ringkasan.
 3. Spawn alvar-auditor (prompt: "node N"). Ada temuan = koreksi di file sesi, audit ulang.
-4. Tanya "ada pertanyaan?". Pertanyaan ISI materi: A clar-q N (stdin = pertanyaan verbatim), spawn alvar-clarifier ("node N"). Jawabannya (LaTeX) hanya ada di file sesi; di chat cukup satu baris bahwa Klarifikasi N (k) siap di Obsidian, plus catatan LESSON_ISSUE/PREREQ bila ada. Lalu dengan Edit sisipkan satu baris sendiri di subkonsep yang ditanyakan, dipisah baris kosong: "Lihat juga: [[#^klar-N-k|Klarifikasi N (k)]]" (k = nomor klarifikasi). Baris dengan format persis ini tidak membuat audit basi. Logistik jawab sendiri.
+4. Tanya "ada pertanyaan?". Pertanyaan ISI materi: A clar-q N (stdin = pertanyaan verbatim), spawn alvar-clarifier ("node N"). Jawabannya (LaTeX) tersimpan di file sesi; apa yang ditampilkan di chat ditentukan keluaran clar-save, plus catatan LESSON_ISSUE/PREREQ bila ada. Lalu dengan Edit sisipkan satu baris sendiri di subkonsep yang ditanyakan, dipisah baris kosong: "Lihat juga: [[#^klar-N-k|Klarifikasi N (k)]]" (k = nomor klarifikasi). Baris dengan format persis ini tidak membuat audit basi. Logistik jawab sendiri.
 5. Kuis: ulangi A quiz-next N dan ikuti perintahnya sampai DONE. Jangan menulis apa pun tentang isi kuis sebelum ada di keluaran quiz-next. AskUserQuestion di fase ini hanya untuk soal dari quiz-next.
    - WRITE: spawn alvar-quiz-writer ("node N").
    - ASK: tampilkan soal lewat AskUserQuestion persis seperti diberikan, lalu A quiz-ans N (stdin JSON) dan sampaikan hasil singkat.

@@ -1,6 +1,12 @@
+---
+language: <language of the material, e.g. Indonesian, English>
+chat_math: <ascii | latex>   # can my chat/terminal render LaTeX? ascii = no
+reader: <obsidian | editor | chat>   # where I read the material and clarifications
+---
+
 # Learner
 
-The tutor reads this every session. It holds my preferences and why I have them. The exact syntax of lesson files lives in the plugin (`alvar.mjs format`), not here.
+The settings above are read by the CLI; keep their values to the listed options. The tutor reads this every session. It holds my preferences and why I have them. The exact syntax of lesson files lives in the plugin (`alvar.mjs format`), not here.
 
 <!-- learn-profile fills every <...> from the interview, in the learner's own words where possible.
      Sections marked (method default) are the Alvar method itself: keep them unless the learner asks for a change. -->
@@ -41,8 +47,8 @@ Every field has a precise core that must not be simplified into something false.
 ## Notation and language
 
 * Use the standard notation and terminology of the field. Define every new symbol or term when it first appears, explain it in plain language, and keep the formal form. Reuse notation consistently.
-* Language of the material: <language>. <Optional: "A technical term gets its English equivalent in parentheses at first use.">
-* Files under `.alvar/` use full LaTeX in `$...$`. <Either: "My terminal cannot render LaTeX or Unicode math, so chat and quiz popups use ASCII; ASCII changes only the typesetting, never the standard." Or: "My chat renders LaTeX.">
+* Language of the material: see `language` above. <Optional: "A technical term gets its English equivalent in parentheses at first use.">
+* Files under `.alvar/` use full LaTeX in `$...$`. Chat follows `chat_math` above; ASCII changes only the typesetting, never the standard.
 
 ## Voice
 
@@ -81,7 +87,7 @@ Do not hold me responsible for following an explanation the tutor gave wrongly. 
 ## Artifacts
 
 * Maps and sessions live under `.alvar/`.
-* I read the material and clarification answers in: <Obsidian / a Markdown editor / chat>. <If not chat: "Chat gets one line saying they are ready, not the content and not a summary.">
+* I read the material and clarification answers where `reader` above says. If it is not `chat`, chat gets one line saying they are ready, not the content and not a summary.
 
 ## References I own
 

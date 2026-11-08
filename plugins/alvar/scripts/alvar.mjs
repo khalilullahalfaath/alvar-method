@@ -107,16 +107,30 @@ const toCC = (s) => s.replace(/write_lesson/g, "A lesson").replace(/audit_lesson
 const REVIEW_SYSTEM = `Kamu reviewer rencana belajar yang independen dan skeptis. Kamu TIDAK menulis ulang rencana dan TIDAK mengajar. Nilai rencana (DAG mermaid + checklist subkonsep) terhadap tujuan dan profil pelajar.
 Periksa: (1) akar DAG benar: prasyarat nyata tidak hilang, tidak ada node yang bergantung pada sesuatu yang belum diajarkan; (2) arah panah masuk akal, tidak ada siklus; (3) cakupan: apa yang standar untuk tujuan ini tapi tidak ada di rencana, dan node yang tidak perlu; (4) granularitas: satu node = satu langkah penalaran; (5) kecocokan dengan profil pelajar; (6) klaim faktual yang meragukan.
 Format: baris pertama "VERDICT: APPROVE" atau "VERDICT: REVISE", lalu temuan berkode (P-GAP, P-ORDER, P-SCOPE, P-GRAIN, P-FIT, P-FACT), satu-dua kalimat dengan saran konkret. Ringkas, Bahasa Indonesia, ASCII saja. Jangan memuji.`
-// Jawaban klarifikasi hanya dibaca di Obsidian, jadi ditulis LaTeX langsung (core yang dibagi dengan pi tetap ASCII).
-const LATEX = "Notasi matematika dalam LaTeX ($...$ atau $$...$$), tanpa simbol Unicode"
-const CLARIFY_CC = CLARIFY_SYSTEM.includes("ASCII saja (tanpa LaTeX/simbol Unicode)")
+// Pengaturan pelajar dari frontmatter LEARNER.md (diisi learn-profile). Tanpa frontmatter: bawaan lama (Indonesia, ASCII, Obsidian).
+const LEARNER_FM = (() => { try { return read(path.join(A, "LEARNER.md")).match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? "" } catch { return "" } })()
+const setting = (k, d) => LEARNER_FM.match(new RegExp(`^${k}:\\s*([^#\\r\\n]*?)\\s*(?:#.*)?$`, "m"))?.[1] || d
+const LANG = setting("language", "Indonesian")
+const ASCII_CHAT = setting("chat_math", "ascii").toLowerCase() !== "latex"   // chat/terminal tidak bisa merender LaTeX
+const READER = setting("reader", "obsidian").toLowerCase()                   // obsidian | editor | chat
+const READER_NAME = { obsidian: "Obsidian", editor: "editor Markdown" }[READER] ?? READER
+const langify = (s) => s.replace(/[Bb]ahasa Indonesia/g, `bahasa materi (${LANG})`)
+// Tampilan di chat: LaTeX diubah ke ASCII hanya bila chat tidak bisa merendernya.
+const view = (s) => ASCII_CHAT ? toAscii(s) : s
+// Soal, penilaian, dan klarifikasi masuk file sesi, jadi selalu LaTeX; tampilannya di chat lewat view().
+const LATEX = "Notasi matematika dalam LaTeX ($...$ atau $$...$$), tanpa simbol matematika Unicode"
+const CLARIFY_CC = langify(CLARIFY_SYSTEM.includes("ASCII saja (tanpa LaTeX/simbol Unicode)")
 	? CLARIFY_SYSTEM.replace("ASCII saja (tanpa LaTeX/simbol Unicode)", LATEX)
-	: CLARIFY_SYSTEM + `\nAturan ASCII tidak berlaku di sini: ${LATEX}.`
-// Log kuis di file sesi memakai LaTeX; terminal tidak bisa merender LaTeX, jadi CLI mengubahnya ke ASCII saat menampilkan.
+	: CLARIFY_SYSTEM + `\nAturan ASCII tidak berlaku di sini: ${LATEX}.`)
 const ASCII_RULE = /Semua teks ASCII saja \(tanpa LaTeX, tanpa simbol Unicode\)|ASCII saja/
-const LATEX_QUIZ = "Notasi matematika WAJIB LaTeX dalam $...$ (mis. $x^2$, $\\sum_{i=1}^{n} x_i$, $\\frac{a}{b}$); teks lain ASCII, tanpa simbol Unicode. CLI mengubah LaTeX ke ASCII untuk terminal, jadi jangan menulis versi ASCII"
-const latexify = (sys) => ASCII_RULE.test(sys) ? sys.replace(ASCII_RULE, LATEX_QUIZ) : `${sys}\n${LATEX_QUIZ}.`
+const LATEX_QUIZ = `Notasi matematika WAJIB LaTeX dalam $...$ (mis. $x^2$, $\\sum_{i=1}^{n} x_i$, $\\frac{a}{b}$), tanpa simbol matematika Unicode.${ASCII_CHAT ? " CLI mengubah LaTeX ke ASCII untuk terminal, jadi jangan menulis versi ASCII" : ""}`
+const latexify = (sys) => langify(ASCII_RULE.test(sys) ? sys.replace(ASCII_RULE, LATEX_QUIZ) : `${sys}\n${LATEX_QUIZ}.`)
 const GRADE_CC = latexify(GRADE_SYSTEM)
+const REVIEW_CC = langify(REVIEW_SYSTEM)
+const AUDIT_CC = langify(AUDIT_SYSTEM)
+// Simbol matematika Unicode (bukan teks berbahasa apa pun) harus ditulis LaTeX.
+// ponytail: rentang huruf Yunani ikut tertolak; bila pelajar memakai bahasa Yunani, keluarkan U+0391-U+03C9 dari pola.
+const UNICODE_MATH = /[∀-⋿←-⇿Α-ω²³¹⁰-₟×÷√]/
 const GREEK = "alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Sigma|Phi|Psi|Omega"
 const SYM = { cdot: "*", times: "x", le: "<=", leq: "<=", ge: ">=", geq: ">=", ne: "!=", neq: "!=", approx: "~=", to: "->", rightarrow: "->", Rightarrow: "=>", infty: "inf", sum: "sum", prod: "prod", int: "int", in: "in", notin: "not in", subseteq: "subset", cup: "union", cap: "intersect", ldots: "...", cdots: "...", pm: "+/-", log: "log", ln: "ln", exp: "exp", max: "max", min: "min", lim: "lim" }
 function toAscii(s) {
@@ -264,7 +278,7 @@ function quizNext(node) {
 	const typed = cur.filter((i) => isTyped(i.it) && !i.ans)
 	if (typed.length) {
 		const missing = typed.filter((i) => !i.answerText)
-		if (missing.length) return `TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan semua jawaban verbatim dalam SATU panggilan: A essay-ans ${node} dengan stdin JSON {"<n>": "jawaban nomor itu", ...}.\n${missing.map((i) => `${i.n}) ${toAscii(i.it.question)}`).join("\n")}`
+		if (missing.length) return `TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan semua jawaban verbatim dalam SATU panggilan: A essay-ans ${node} dengan stdin JSON {"<n>": "jawaban nomor itu", ...}.\n${missing.map((i) => `${i.n}) ${view(i.it.question)}`).join("\n")}`
 		return `GRADE: spawn alvar-grader SATU kali (prompt: "node ${node}, semua soal diketik"). Soal: ${typed.map((i) => i.n).join(", ")}.`
 	}
 	const wrong = cur.filter((i) => !i.ans.ok)
@@ -286,7 +300,7 @@ const then = (node) => `\n---\nLangkah berikutnya (sudah dijalankan; jangan pang
 
 // Soal yang diketik pelajar (esai, isian) dinilai penilai; soal pilihan (single, multi) dinilai kode.
 const isTyped = (it) => it.type === "essay" || it.type === "cloze"
-const strip = (i) => ({ n: i.n, q: toAscii(i.it.question), multi: i.it.type === "multi", opts: i.it.options.map((o) => toAscii(o.label)) })
+const strip = (i) => ({ n: i.n, q: view(i.it.question), multi: i.it.type === "multi", opts: i.it.options.map((o) => view(o.label)) })
 
 const CMDS = {
 	phase() {
@@ -304,7 +318,7 @@ const CMDS = {
 		const f = needFile()
 		let learner = ""
 		try { learner = read(path.join(A, "LEARNER.md")) } catch {}
-		sayPaged(`${REVIEW_SYSTEM}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`)
+		sayPaged(`${REVIEW_CC}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`)
 	},
 	"plan-done"() { state.planReviewed = true; saveState(); say("ok") },
 	next() {
@@ -328,13 +342,15 @@ const CMDS = {
 		const structure = lessonStructureIssues(cur, node, body)
 		if (structure.length) die(`Materi ${node} ditolak (struktur): ${structure.join("; ")}. Perbaiki lalu tulis ulang seluruh materi.`)
 		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
-		say(`ok ${node} (${body.length} karakter). Jangan tampilkan materi di chat (pelajar membaca di Obsidian); cukup satu baris bahwa materi ${node} siap di file sesi.`)
+		say(`ok ${node} (${body.length} karakter). ` + (READER === "chat"
+			? `Tampilkan materi di chat: jalankan A show ${node} --chat dan tampilkan keluarannya apa adanya (semua bagian, ikuti --bagian=).`
+			: `Jangan tampilkan materi di chat (pelajar membaca di ${READER_NAME}); cukup satu baris bahwa materi ${node} siap di file sesi.`))
 	},
 	"audit-ctx"() {
 		const f = needFile(), node = pos[0], t = read(f), lesson = nodeSection(t, node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
 		const done = resolvedFor(t, node)
-		sayPaged(`${AUDIT_SYSTEM}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
+		sayPaged(`${AUDIT_CC}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
 	},
 	"audit-save"() {
 		const f = needFile(), node = pos[0]
@@ -379,7 +395,9 @@ const CMDS = {
 		if (issue) t = flag(t, node, "clarify", issue)[0]
 		fs.writeFileSync(f, t)
 		delete state.clarQ; saveState()
-		say(`Klarifikasi ${node} (${n}) tersimpan di file sesi (^klar-${node}-${n}). Jangan tampilkan jawabannya di chat; pelajar membacanya di Obsidian.` + (issue ?`\n[LESSON_ISSUE dicatat: ${issue}. Koreksi materi.]` : "") + (prereq ? `\n[Prasyarat belum diajarkan: ${prereq}.]` : ""))
+		say((READER === "chat"
+			? `Klarifikasi ${node} (${n}) tersimpan (^klar-${node}-${n}). Tampilkan jawaban ini di chat apa adanya:\n${view(shown)}`
+			: `Klarifikasi ${node} (${n}) tersimpan di file sesi (^klar-${node}-${n}). Jangan tampilkan jawabannya di chat; pelajar membacanya di ${READER_NAME}.`) + (issue ?`\n[LESSON_ISSUE dicatat: ${issue}. Koreksi materi.]` : "") + (prereq ? `\n[Prasyarat belum diajarkan: ${prereq}.]` : ""))
 	},
 	"tq-save"() { const f = needFile(); const q = stdin().trim(); fs.writeFileSync(f, transferEntry(read(f), pos[0], pos[1], q)); say(`Soal tersimpan (${pos[0]} / ${pos[1]})`) },
 	"tq-get"() { const q = transferFor(read(needFile()), pos[0], pos[1]); q === null ? die(`Tolak: soal ${pos[0]} / ${pos[1]} belum tersimpan. Jalankan tq-save dulu.`) : say(`Teks soal yang dinilai:\n${q}`) },
@@ -404,9 +422,12 @@ const CMDS = {
 			const fields = [it?.question, it?.explanation, it?.model_answer, ...(it?.rubric ?? []), ...(it?.options ?? []).map((o) => o?.label)]
 			const bad = fields.filter(asciiMath)
 			if (bad.length) errs.push(`soal ${i + 1}: notasi matematika harus LaTeX dalam $...$ (kode di backtick), mis. "${String(bad[0]).slice(0, 60)}"`)
-			const shown = (it?.options ?? []).map((o) => toAscii(o?.label))
+			const shown = (it?.options ?? []).map((o) => view(o?.label))
 			if (new Set(shown).size !== shown.length) errs.push(`soal ${i + 1}: dua label opsi menjadi sama setelah diubah ke ASCII`)
+			if (fields.some((f) => UNICODE_MATH.test(String(f ?? "")))) errs.push(`soal ${i + 1}: simbol matematika Unicode; tulis dalam LaTeX $...$`)
 		}
+		// Core (dibagi dengan pi) menolak semua non-ASCII; itu memblokir bahasa beraksara non-Latin. Yang dijaga hanya simbol matematika Unicode di atas.
+		errs.splice(0, errs.length, ...errs.filter((e) => !/karakter non-ASCII/.test(e)))
 		if (errs.length) die("REJECT:\n- " + errs.join("\n- ") + "\nPerbaiki semuanya lalu kirim ulang.")
 		for (const it of out.items) {
 			if (!isTyped(it)) it.options = shuffle(it.options)
@@ -426,7 +447,8 @@ const CMDS = {
 		if (!what) die("Pakai: show plan | show <node>")
 		if (what === "plan") return sayPaged(`${t.split(/^## Node /m)[0]}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
 		const sec = nodeSection(t, what)
-		sec ? sayPaged(lessonOnly(sec)) : die(`Bagian "## Node ${what}" belum ada.`)
+		if (!sec) die(`Bagian "## Node ${what}" belum ada.`)
+		sayPaged(args.includes("--chat") ? view(lessonOnly(sec)) : lessonOnly(sec))   // --chat: versi untuk ditampilkan ke pelajar
 	},
 	"quiz-ans"() {
 		const node = pos[0], q = qload(node), given = JSON.parse(stdin()), out = []
@@ -445,7 +467,7 @@ const CMDS = {
 			const ok = !dontKnow && (part ? part.pass : values.length === it.correct.length && values.every((v) => it.correct.includes(v)))
 			i.ans = { ok, score: part?.score, dontKnow, note: dontKnow && /tidak tahu|don'?t know/i.test(free) ? "" : free, labels: hit.map((o) => o.label), values }
 			const key = it.options.map((o, k) => (it.correct.includes(o.value) ? L(k) : null)).filter(Boolean).join(", ")
-			out.push(`Q${n}: ${ok ? "BENAR" : dontKnow ? "TIDAK TAHU" : "SALAH"}${part ? ` (skor ${Math.round(part.score * 100)}%)` : ""}. Kunci (${key}). ${toAscii(it.explanation)}`)
+			out.push(`Q${n}: ${ok ? "BENAR" : dontKnow ? "TIDAK TAHU" : "SALAH"}${part ? ` (skor ${Math.round(part.score * 100)}%)` : ""}. Kunci (${key}). ${view(it.explanation)}`)
 		}
 		state.quizOpen = false; saveState()
 		qsave(q)
@@ -485,7 +507,8 @@ const CMDS = {
 		}
 		qsave(q)
 		let txt = out.join("\n\n")
-		say((isAscii(txt = toAscii(txt)) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
+		txt = view(txt)
+		say((ASCII_CHAT && !isAscii(txt) ? txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?") : txt) + then(pos[0]))
 	},
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
@@ -499,7 +522,8 @@ const CMDS = {
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
 		qsave(q)
 		let txt = `Esai ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(g.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${g.feedback ?? ""}`
-		say((isAscii(txt = toAscii(txt)) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
+		txt = view(txt)
+		say((ASCII_CHAT && !isAscii(txt) ? txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?") : txt) + then(pos[0]))
 	},
 }
 

@@ -21,4 +21,4 @@ Mode satu soal (prompt menyebut 'soal <n>'):
 Aturan penilaian (wajib):
 - Baca SELURUH jawaban pelajar, semua baris dan paragraf, sebelum menilai. Jawaban sering lebih dari satu baris dan bagian akhirnya sering memuat kriteria yang diminta.
 - Untuk tiap kriteria yang kamu nilai BELUM, isi bidang criterion dengan kriteria itu dan sertakan di feedback satu kutipan verbatim dari jawaban pelajar yang paling dekat dengan kriteria itu, lalu satu kalimat mengapa kutipan itu belum cukup. Jangan menulis "tidak dibahas", "tidak ada", atau "tidak disebut" sebelum mencari di semua baris jawaban; kalau ada kalimat yang menyentuh kriteria itu, nilai sebagian dan sebutkan apa yang sudah ada dan apa yang kurang.
-- Variasi bahasa (Indonesia atau Inggris) dan kesalahan tata bahasa kecil tidak mengurangi nilai kecuali kriteria menilai bahasa itu sendiri.
+- Variasi bahasa (bahasa materi pelajar atau Inggris) dan kesalahan tata bahasa kecil tidak mengurangi nilai kecuali kriteria menilai bahasa itu sendiri.

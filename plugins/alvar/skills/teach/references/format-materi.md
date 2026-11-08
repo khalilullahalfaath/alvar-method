@@ -42,7 +42,10 @@ Label hanya dipakai bila node memuat definisi, teorema, atau contoh utama; node 
 * Bukti langsung mengikuti teoremanya dan memakai label teorema itu, tanpa label sendiri.
 * Rujukan memakai token persis (mis. `L.1-D1`), bukan parafrase. Rujukan ke node lain: sebut id node dan deskripsi biasa, jangan token label atau id subkonsep node lain. **[CLI]**
 
-## 5. Callout Obsidian
+## 5. Callout
+
+Sintaks callout Obsidian (`> [!tipe] Judul`). Obsidian dan GitHub merendernya sebagai kotak; editor lain menampilkannya sebagai kutipan biasa yang tetap terbaca, jadi aturannya sama untuk semua `reader`.
+
 
 Callout menggantikan label tebal run-in untuk blok yang sama. Semua terbuka (tanpa `-` lipat). Isinya diaudit seperti prosa.
 
@@ -62,7 +65,7 @@ Callout menggantikan label tebal run-in untuk blok yang sama. Semua terbuka (tan
 
 ## 6. Jelaskan balik **[CLI]**
 
-Teks tebal `**Jelaskan balik**` (bukan heading) di akhir node, diikuti 2-3 butir bernomor. Tiap butir meminta pelajar menjelaskan dengan kata-kata sendiri mengapa suatu klaim kunci berlaku, atau apa yang rusak bila syarat dibuang; bukan menghitung ulang angka. Tidak menduplikasi atau membocorkan soal kuis. Ditulis sebelum audit (edit setelah audit membuat audit basi). Tidak ditampilkan di chat.
+Teks tebal `**Jelaskan balik**` (bukan heading) di akhir node, diikuti 2-3 butir bernomor. Tiap butir meminta pelajar menjelaskan dengan kata-kata sendiri mengapa suatu klaim kunci berlaku, atau apa yang rusak bila syarat dibuang; bukan menghitung ulang angka. Tidak menduplikasi atau membocorkan soal kuis. Ditulis sebelum audit (edit setelah audit membuat audit basi). Tampil di chat hanya bila `reader: chat` (bersama seluruh materi).
 
 ## 7. Gambar, diagram, kode
 
@@ -70,12 +73,13 @@ Teks tebal `**Jelaskan balik**` (bukan heading) di akhir node, diikuti 2-3 butir
   * Contoh, bukan daftar lengkap: alur proses atau pipeline, pohon keputusan memilih opsi, klasifikasi dengan kriteria di tiap cabang, siklus hidup atau mesin keadaan, struktur bukti panjang, rantai sebab-akibat, struktur argumen tulisan, relasi data atau kelas.
   * Jangan dipaksakan: daftar fakta, definisi tunggal, dan perbandingan sejajar lebih jelas sebagai prosa atau tabel; peta prasyarat antar-node sudah ada di DAG rencana.
   * Diagram melengkapi prosa, tidak menggantikannya. Label simpul pendek dalam tanda kutip, tanpa LaTeX; kriteria percabangan ditulis di label panah. Isinya diaudit: urutan, arah panah, dan kriteria harus benar.
-  * Pakai tipe yang lama didukung Obsidian: `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `classDiagram`, `erDiagram`. Hindari tipe baru (mis. `mindmap`) yang mungkin tidak tampil.
+  * Pakai tipe yang lama didukung (Obsidian, GitHub, VS Code): `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `classDiagram`, `erDiagram`. Hindari tipe baru (mis. `mindmap`) yang mungkin tidak tampil.
 * Gambar SVG **[pilihan]**: bawaan **hanya bila pelajar memintanya** (LEARNER.md bisa memilih "bila sangat membantu") (lewat `alvar:learn-visual`, atau tanda G di checklist). Dengan bawaan ini, jangan menambah gambar atas inisiatif sendiri. Proses render-cek ada di agen `alvar-lesson-writer`.
 * Snippet kode **[pilihan]** (bawaan ada; LEARNER.md bisa memilih tidak ada): bila node mengajarkan algoritma atau komputasi yang wajar dijalankan, blok ```python pendek berisi intinya di blok inti, tepat setelah rumus atau prosedurnya. Jalankan dulu terhadap contoh angka di materi dan pastikan cocok. Lewati bila tidak ada yang dijalankan. Snippet melengkapi pernyataan presisi, tidak menggantikannya.
 
 ## 8. Bahasa dan notasi
 
-* Bahasa Indonesia; istilah teknis diikuti padanan Inggris dalam kurung saat pertama muncul.
-* Semua simbol matematika dalam `$...$` dengan LaTeX penuh (`\mathbf`, `\operatorname`, `\begin{bmatrix}` dengan `\\`); tanpa Unicode matematika.
+* Prosa ditulis dalam `language` dari frontmatter LEARNER.md (bawaan Indonesian). Istilah teknis diikuti padanan Inggris dalam kurung saat pertama muncul bila LEARNER.md memintanya.
+* **Kosakata markup tetap**, apa pun bahasanya, karena dibaca CLI, auditor, dan skrip: nama jenis label (`Definisi`, `Teorema`, `Lema`, `Contoh`, dan jenis lain di bagian 4), `**Jelaskan balik**`, `#### Rangkuman <id>`, judul callout (`Intinya`, `Contoh langsung`, `Jebakan`, `Jembatan`, `Versi sederhana`, dan seterusnya), serta penanda yang ditulis CLI (`Klarifikasi`, `Kuis formatif`, `Remedial`, `Lihat juga`). Jangan menerjemahkannya.
+* Semua simbol matematika dalam `$...$` dengan LaTeX penuh (`\mathbf`, `\operatorname`, `\begin{bmatrix}` dengan `\\`); tanpa simbol matematika Unicode. File selalu LaTeX; bila `chat_math: ascii`, CLI sendiri yang mengubahnya ke ASCII saat menampilkan di chat.
 * Panjang bukan batasan untuk blok inti: node boleh panjang. Jangan pernah memendekkan blok inti untuk memberi ruang.
