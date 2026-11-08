@@ -32,15 +32,20 @@ const mk = (slots) => ({ lesson_issue: "", items: slots.map((s, i) => s.type ===
 	? { type: "essay", concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Jelaskan A.1 dengan contoh.", rubric: ["a", "b"], model_answer: "x" }
 	: s.type === "cloze"
 	? { type: "cloze", concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Nilai ____ adalah hasil dari konsep A.1.", rubric: ["a"], model_answer: "x" }
-	: { type: s.type, concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Soal " + s.type, options: ["a", "b", "c", "d"].map((v) => ({ label: `Pernyataan lengkap tentang konsep nomor ${v} dalam materi`, value: v, ...((s.type === "multi" ? ["a", "b"] : ["a"]).includes(v) ? {} : { misconception: "salah paham " + v }) })), correct: s.type === "multi" ? ["a", "b"] : ["a"], explanation: "pen" }) })
+	: { type: s.type, concept: s.concept ?? (i % 2 ? "A.2" : "A.1"), angle: s.angle, question: "Soal " + s.type + " tentang $\\frac{x_{i}^{2}}{n}$", options: ["a", "b", "c", "d"].map((v) => ({ label: `Pernyataan lengkap tentang konsep $\\alpha_${v}$ dalam materi`, value: v, ...((s.type === "multi" ? ["a", "b"] : ["a"]).includes(v) ? {} : { misconception: "salah paham " + v }) })), correct: s.type === "multi" ? ["a", "b"] : ["a"], explanation: "pen" }) })
 const slotsOf = () => JSON.parse(fs.readFileSync(qf, "utf8")).pending.slots
 assert.match(run(JSON.stringify({ items: [] }), "quiz-save", "A"), /REJECT/)
+const asciiSet = mk(slotsOf()); asciiSet.items[0].question = "Berapa x^2 bila x = 3?"
+assert.match(run(JSON.stringify(asciiSet), "quiz-save", "A"), /REJECT[\s\S]*harus LaTeX/)       // log wajib LaTeX
 assert.match(run(JSON.stringify(mk(slotsOf())), "quiz-save", "A"), /^ok/)
 
 let nxt = run("", "quiz-next", "A")
 assert.match(nxt, /^ASK/)
 const items = JSON.parse(nxt.trim().split("\n").pop())
-const wrongAns = Object.fromEntries(items.map((i) => [i.n, ["tidak tahu"]]))
+assert.match(items[0].q, /\(x_i\^2\)\/\(n\)/); assert.doesNotMatch(nxt, /\$/)  // terminal: ASCII
+assert.match(items[0].opts[0], /konsep alpha_[a-d] dalam/)
+// jawaban dengan label ASCII (yang tampil) tetap dikenali; sisanya "tidak tahu"
+const wrongAns = Object.fromEntries(items.map((i, k) => [i.n, k ? ["tidak tahu"] : [i.opts[0]]]))
 // Perintah simpan menempelkan langkah berikutnya; tutor mengikutinya tanpa quiz-next lagi.
 const step = (out) => out.includes("\n---\nLangkah berikutnya") ? out.split("\n---\nLangkah berikutnya")[1].replace(/^[^\n]*\n/, "") : out
 nxt = step(run(JSON.stringify(wrongAns), "quiz-ans", "A"))
@@ -70,7 +75,10 @@ assert.doesNotMatch(r, /KONTEKS/)                                            // 
 assert.match(run("", "show", "plan"), /flowchart TD[\s\S]*Node status \(map\)[\s\S]*\| A \|/)
 const shown = run("", "show", "A")
 assert.match(shown, /### A\.1 Satu/); assert.doesNotMatch(shown, /Kuis formatif/) // materi saja, tanpa kuis
-assert.match(fs.readFileSync(path.join(S, "2026-01-01-demo.md"), "utf8"), /### Kuis formatif A/)
+const log = fs.readFileSync(path.join(S, "2026-01-01-demo.md"), "utf8")
+assert.match(log, /### Kuis formatif A/)
+assert.match(log, /\$\\frac\{x_\{i\}\^\{2\}\}\{n\}\$/)                       // file sesi: LaTeX asli
+assert.match(log, /Dijawab: Pernyataan lengkap tentang konsep \$\\alpha_[a-d]\$/) // label ASCII dicocokkan ke label LaTeX
 assert.match(fs.readFileSync(path.join(M, "demo.md"), "utf8"), /\| A \|/)
 assert.match(run("", "phase", "capstone", "demo"), /Capstone ditolak/)
 // --- hook ---

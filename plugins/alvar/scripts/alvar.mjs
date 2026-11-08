@@ -112,7 +112,39 @@ const LATEX = "Notasi matematika dalam LaTeX ($...$ atau $$...$$), tanpa simbol 
 const CLARIFY_CC = CLARIFY_SYSTEM.includes("ASCII saja (tanpa LaTeX/simbol Unicode)")
 	? CLARIFY_SYSTEM.replace("ASCII saja (tanpa LaTeX/simbol Unicode)", LATEX)
 	: CLARIFY_SYSTEM + `\nAturan ASCII tidak berlaku di sini: ${LATEX}.`
-const QUIZ_CC = QUIZ_SYSTEM + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
+// Log kuis di file sesi memakai LaTeX; terminal tidak bisa merender LaTeX, jadi CLI mengubahnya ke ASCII saat menampilkan.
+const ASCII_RULE = /Semua teks ASCII saja \(tanpa LaTeX, tanpa simbol Unicode\)|ASCII saja/
+const LATEX_QUIZ = "Notasi matematika WAJIB LaTeX dalam $...$ (mis. $x^2$, $\\sum_{i=1}^{n} x_i$, $\\frac{a}{b}$); teks lain ASCII, tanpa simbol Unicode. CLI mengubah LaTeX ke ASCII untuk terminal, jadi jangan menulis versi ASCII"
+const latexify = (sys) => ASCII_RULE.test(sys) ? sys.replace(ASCII_RULE, LATEX_QUIZ) : `${sys}\n${LATEX_QUIZ}.`
+const GRADE_CC = latexify(GRADE_SYSTEM)
+const GREEK = "alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Sigma|Phi|Psi|Omega"
+const SYM = { cdot: "*", times: "x", le: "<=", leq: "<=", ge: ">=", geq: ">=", ne: "!=", neq: "!=", approx: "~=", to: "->", rightarrow: "->", Rightarrow: "=>", infty: "inf", sum: "sum", prod: "prod", int: "int", in: "in", notin: "not in", subseteq: "subset", cup: "union", cap: "intersect", ldots: "...", cdots: "...", pm: "+/-", log: "log", ln: "ln", exp: "exp", max: "max", min: "min", lim: "lim" }
+function toAscii(s) {
+	if (!s || !s.includes("$")) return s
+	return String(s).replace(/\$\$([\s\S]+?)\$\$|\$([^$]+)\$/g, (_, a, b) => {
+		let t = a ?? b, prev
+		do {
+			prev = t
+			t = t.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname|textbf)\{([^{}]*)\}/g, "$1")
+				.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "($1)/($2)")
+				.replace(/\\sqrt\{([^{}]*)\}/g, "sqrt($1)")
+				.replace(/\\binom\{([^{}]*)\}\{([^{}]*)\}/g, "C($1,$2)")
+				.replace(/\{,\}/g, ",")
+				.replace(/\^\{([^{}]*)\}/g, (_, x) => x.length > 1 ? `^(${x})` : `^${x}`)
+				.replace(/_\{([^{}]*)\}/g, (_, x) => x.length > 1 ? `_(${x})` : `_${x}`)
+		} while (t !== prev)
+		return t.replace(/\\left|\\right/g, "").replace(new RegExp(`\\\\(${GREEK})\\b`, "g"), "$1")
+			.replace(/\\([A-Za-z]+)\{([^{}]*)\}/g, (m, c, x) => `${SYM[c] ?? c}(${x})`)   // \hat{y} -> hat(y)
+			.replace(/\\([A-Za-z]+)/g, (m, c) => SYM[c] ?? c)
+			.replace(/\\[{}]/g, (m) => m[1]).replace(/\\[,;:! ]/g, " ").replace(/[{}]/g, "")
+	}).replace(/\\\$/g, "$")
+}
+// Notasi matematika yang lolos sebagai ASCII di luar $...$ (heuristik yang sama dengan hook latex-check).
+const asciiMath = (s) => {
+	const t = String(s ?? "").replace(/\$\$[\s\S]*?\$\$/g, "").replace(/\$[^$]*\$/g, "").replace(/`[^`]*`/g, "")
+	return /\b[A-Za-z]\^[\w*{(]/.test(t) || /\b[A-Za-z]_[\w{]/.test(t) || /\b(sqrt|sum_)\b/.test(t)
+}
+const QUIZ_CC = latexify(QUIZ_SYSTEM) + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
 
 // ---------- kuis ----------
 const qpath = (node) => path.join(A, "quiz", `${node}.json`)
@@ -232,7 +264,7 @@ function quizNext(node) {
 	const typed = cur.filter((i) => isTyped(i.it) && !i.ans)
 	if (typed.length) {
 		const missing = typed.filter((i) => !i.answerText)
-		if (missing.length) return `TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan semua jawaban verbatim dalam SATU panggilan: A essay-ans ${node} dengan stdin JSON {"<n>": "jawaban nomor itu", ...}.\n${missing.map((i) => `${i.n}) ${i.it.question}`).join("\n")}`
+		if (missing.length) return `TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan semua jawaban verbatim dalam SATU panggilan: A essay-ans ${node} dengan stdin JSON {"<n>": "jawaban nomor itu", ...}.\n${missing.map((i) => `${i.n}) ${toAscii(i.it.question)}`).join("\n")}`
 		return `GRADE: spawn alvar-grader SATU kali (prompt: "node ${node}, semua soal diketik"). Soal: ${typed.map((i) => i.n).join(", ")}.`
 	}
 	const wrong = cur.filter((i) => !i.ans.ok)
@@ -254,7 +286,7 @@ const then = (node) => `\n---\nLangkah berikutnya (sudah dijalankan; jangan pang
 
 // Soal yang diketik pelajar (esai, isian) dinilai penilai; soal pilihan (single, multi) dinilai kode.
 const isTyped = (it) => it.type === "essay" || it.type === "cloze"
-const strip = (i) => ({ n: i.n, q: i.it.question, multi: i.it.type === "multi", opts: i.it.options.map((o) => o.label) })
+const strip = (i) => ({ n: i.n, q: toAscii(i.it.question), multi: i.it.type === "multi", opts: i.it.options.map((o) => toAscii(o.label)) })
 
 const CMDS = {
 	phase() {
@@ -366,7 +398,15 @@ const CMDS = {
 		let out
 		try { out = extractJson(stdin()) } catch (e) { die("REJECT: JSON tidak terbaca. Kirim ulang hanya JSON.") }
 		const errs = validateItems(out.items, p.slots, p.round === 1 && q.kind === "quiz" ? p.concepts ?? [] : [])
-		for (const [i, it] of (out.items ?? []).entries()) if (it?.options?.length > 4) errs.push(`soal ${i + 1}: maksimal 4 opsi`)
+		for (const [i, it] of (out.items ?? []).entries()) {
+			if (it?.options?.length > 4) errs.push(`soal ${i + 1}: maksimal 4 opsi`)
+			// Log di file sesi harus LaTeX: tangkap notasi ASCII di sini supaya penulis soal yang memperbaikinya, bukan tutor lewat Edit.
+			const fields = [it?.question, it?.explanation, it?.model_answer, ...(it?.rubric ?? []), ...(it?.options ?? []).map((o) => o?.label)]
+			const bad = fields.filter(asciiMath)
+			if (bad.length) errs.push(`soal ${i + 1}: notasi matematika harus LaTeX dalam $...$ (kode di backtick), mis. "${String(bad[0]).slice(0, 60)}"`)
+			const shown = (it?.options ?? []).map((o) => toAscii(o?.label))
+			if (new Set(shown).size !== shown.length) errs.push(`soal ${i + 1}: dua label opsi menjadi sama setelah diubah ke ASCII`)
+		}
 		if (errs.length) die("REJECT:\n- " + errs.join("\n- ") + "\nPerbaiki semuanya lalu kirim ulang.")
 		for (const it of out.items) {
 			if (!isTyped(it)) it.options = shuffle(it.options)
@@ -393,15 +433,17 @@ const CMDS = {
 			if (!i) { out.push(`Q${n}: diabaikan (tidak ada / sudah dijawab)`); continue }
 			const it = i.it, L = (k) => String.fromCharCode(97 + k)
 			const arr = [].concat(sel).map(String)
-			const hit = it.options.filter((o) => arr.includes(o.label))
-			const free = arr.filter((a) => !it.options.some((o) => o.label === a)).join("; ")
+			// Pelajar memilih label versi ASCII (yang tampil di terminal); log memakai label LaTeX aslinya.
+			const same = (o, a) => o.label === a || toAscii(o.label) === a
+			const hit = it.options.filter((o) => arr.some((a) => same(o, a)))
+			const free = arr.filter((a) => !it.options.some((o) => same(o, a))).join("; ")
 			const dontKnow = !hit.length
 			const values = hit.map((o) => o.value)
 			const part = it.type === "multi" && !dontKnow ? scoreMulti(values, it.correct) : null
 			const ok = !dontKnow && (part ? part.pass : values.length === it.correct.length && values.every((v) => it.correct.includes(v)))
 			i.ans = { ok, score: part?.score, dontKnow, note: dontKnow && /tidak tahu|don'?t know/i.test(free) ? "" : free, labels: hit.map((o) => o.label), values }
 			const key = it.options.map((o, k) => (it.correct.includes(o.value) ? L(k) : null)).filter(Boolean).join(", ")
-			out.push(`Q${n}: ${ok ? "BENAR" : dontKnow ? "TIDAK TAHU" : "SALAH"}${part ? ` (skor ${Math.round(part.score * 100)}%)` : ""}. Kunci (${key}). ${it.explanation}`)
+			out.push(`Q${n}: ${ok ? "BENAR" : dontKnow ? "TIDAK TAHU" : "SALAH"}${part ? ` (skor ${Math.round(part.score * 100)}%)` : ""}. Kunci (${key}). ${toAscii(it.explanation)}`)
 		}
 		state.quizOpen = false; saveState()
 		qsave(q)
@@ -423,7 +465,7 @@ const CMDS = {
 		const q = qload(pos[0]), todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		if (!todo.length) die("Tidak ada jawaban diketik yang menunggu dinilai (essay-ans dulu).")
 		const body = todo.map((x) => `### Soal ${x.n} (${x.it.type === "cloze" ? "isian" : "esai"})\n${x.it.question}\nRubrik: ${JSON.stringify(x.it.rubric)}\nContoh jawaban: ${x.it.model_answer}\nJawaban pelajar: ${x.answerText}`).join("\n\n")
-		sayPaged(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
+		sayPaged(`${GRADE_CC}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
 	},
 	"typed-save"() {
 		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
@@ -440,13 +482,13 @@ const CMDS = {
 			out.push(`${i.it.type === "cloze" ? "Isian" : "Esai"} ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(r.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${r.feedback ?? ""}`)
 		}
 		qsave(q)
-		const txt = out.join("\n\n")
-		say((isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
+		let txt = out.join("\n\n")
+		say((isAscii(txt = toAscii(txt)) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
 	},
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
-		sayPaged(`${GRADE_SYSTEM}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
+		sayPaged(`${GRADE_CC}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
 	},
 	"essay-save"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
@@ -454,8 +496,8 @@ const CMDS = {
 		const g = extractJson(stdin()), sc = scoreEssay(g.criteria)
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
 		qsave(q)
-		const txt = `Esai ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(g.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${g.feedback ?? ""}`
-		say((isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
+		let txt = `Esai ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(g.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${g.feedback ?? ""}`
+		say((isAscii(txt = toAscii(txt)) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
 	},
 }
 
