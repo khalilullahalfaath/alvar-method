@@ -23,7 +23,7 @@ if (ev === "start") {
 	if ((input.source === "compact" || input.source === "clear") && state.resume) state.resume.session = null
 	fs.writeFileSync(sp, JSON.stringify(state))
 	const r = state.resume
-	const resume = r && state.phase === "teach" ? `\nLanjutan Alvar (fase teach, topik ${r.topic}): node terakhir ${r.node}. ${r.next ? `Bila pelajar bilang lanjut: A next ${r.next} --topic=${r.topic}.` : "Semua node tuntas: A phase review."} Rencana dan status node: A show plan --topic=${r.topic}.` : ""
+	const resume = r && state.phase === "teach" ? `\nLanjutan Alvar (fase teach, topik ${r.topic}): node terakhir ${r.node}. ${r.next ? `Bila pelajar bilang lanjut: A next ${r.next} --topic=${r.topic}.` : "Semua node tuntas: A phase review."} Tidak perlu membaca rencana utuh untuk memilih node (A next tanpa id memilihkannya); bila butuh konteks node itu, A show plan <node> --topic=${r.topic}.` : ""
 	out({ hookEventName: "SessionStart", additionalContext: `Alvar aktif. Bila CLAUDE_PLUGIN_ROOT tidak terisi, A = ${ALVAR}${resume}` })
 } else if (ev === "prompt") {
 	if (state.phase && state.injected !== state.phase) {

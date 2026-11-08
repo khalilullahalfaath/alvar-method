@@ -31,7 +31,7 @@ export const RULES = {
 6. Hasil menyebut LESSON_ISSUE: laporkan ke pelajar dan koreksi materi. Status edge: jelaskan bagian lemah, tawarkan A quiz-next N --ulang atau A quiz-next N --remedial (kuis yang sudah selesai tidak dimulai ulang tanpa salah satu flag itu).
 - Soal transfer di luar kuis: A tq-save N strand (stdin soal) sebelum jawaban diterima; A tq-get N strand sebelum menilai.
 - Kesalahan tutor tidak dibebankan ke pelajar. Map dan Ledger diisi CLI; jangan tulis status known sendiri.
-- Hemat konteks: jangan Read file sesi utuh (hook menolak). Pakai A show plan (DAG, checklist, status node) dan A show N (materi satu node); untuk Edit, Grep -n lalu Read dengan offset/limit. Bila DONE memuat KONTEKS, sampaikan ajakan /clear itu ke pelajar.`,
+- Hemat konteks: jangan Read file sesi utuh (hook menolak). Pakai A next (tanpa id memilih node berikutnya), A show plan N (DAG, checklist N dan pendahulunya, status node; show plan tanpa node hanya bila rencana utuh memang perlu, mis. revisi rencana) dan A show N (materi satu node); untuk Edit, Grep -n lalu Read dengan offset/limit. Bila DONE memuat KONTEKS, sampaikan ajakan /clear itu ke pelajar.`,
 	review: `FASE REVIEW (A = ${ALVAR}). Audit artefak, jangan mengajar.
 - Coverage (C-MISSING, C-THIN, P-GAP), Correctness (K-ERR, K-AMBIG), Mastery (M-NONE, M-RECOG, M-FAIL), Artifact integrity.
 - Tiap K-FLAG di ## Provenance: valid -> jadikan K-ERR, koreksi materi, minta bukti segar; tidak valid -> resolved dengan alasan.
