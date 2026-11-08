@@ -36,7 +36,10 @@ const sayPaged = (text, key) => {
 		if (pages.at(-1).length + line.length + 1 > PAGE && pages.at(-1)) pages.push("")
 		pages[pages.length - 1] += line + "\n"
 	}
-	const k = Math.min(Math.max(+(args.find((a) => a.startsWith("--bagian="))?.slice(9) ?? 1), 1), pages.length)
+	const want = +(args.find((a) => a.startsWith("--bagian="))?.slice(9) ?? 1)
+	// Bagian di luar jangkauan: jangan mencetak ulang halaman yang sudah dibaca.
+	if (want > pages.length) return say(`Keluaran ini hanya ${pages.length} bagian dan sudah lengkap; tidak ada bagian ${want}.`)
+	const k = Math.max(want, 1)
 	if (key) {
 		state.paged ??= {}
 		const p = state.paged[key]?.pages === pages.length ? state.paged[key] : { pages: pages.length, seen: [] }
@@ -498,10 +501,11 @@ const CMDS = {
 			let plan = t.split(/^## Node /m)[0]
 			// show plan N: checklist hanya untuk N dan pendahulunya di DAG (rencana besar bisa memuat puluhan node).
 			const n = pos[1]
-			if (n) {
-				const keep = new Set([n, ...dagEdges(t).filter(([, b]) => b === n).map(([a]) => a)])
-				plan = plan.split("\n").filter((l) => { const id = l.match(/^- \*\*([A-Za-z0-9]+)\*\*/)?.[1]; return !id || keep.has(id) }).join("\n")
-			}
+			// Tanpa node dan tanpa --utuh: checklist dibuang (cukup DAG dan catatan). Bukan instruksi agen, karena definisi agen
+			// bisa basi di sesi yang sudah berjalan; --utuh hanya untuk revisi rencana.
+			const keep = n ? new Set([n, ...dagEdges(t).filter(([, b]) => b === n).map(([a]) => a)]) : args.includes("--utuh") ? null : new Set()
+			if (keep) plan = plan.split("\n").filter((l) => { const id = l.match(/^- \*\*([A-Za-z0-9]+)\*\*/)?.[1]; return !id || keep.has(id) }).join("\n")
+			if (!n && keep) plan += "\n[Checklist per node tidak dicetak. Untuk satu node: show plan <node>; seluruh rencana (revisi rencana): show plan --utuh.]"
 			return sayPaged(`${plan}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
 		}
 		const sec = nodeSection(t, what)

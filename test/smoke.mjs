@@ -80,6 +80,9 @@ assert.match(r, /^DONE/)
 assert.doesNotMatch(r, /KONTEKS/)                                            // node belum tuntas: tidak diajak /clear
 assert.match(run("", "quiz-next", "A"), /^SELESAI/)                          // gate: kuis selesai tidak dimulai ulang diam-diam
 assert.match(run("", "show", "plan"), /flowchart TD[\s\S]*Node status \(map\)[\s\S]*\| A \|/)
+assert.doesNotMatch(run("", "show", "plan"), /\*\*A\*\*: A\.1/)             // tanpa node: checklist tidak dicetak
+assert.match(run("", "show", "plan", "--utuh"), /\*\*A\*\*: A\.1[\s\S]*\*\*B\*\*: B\.1/)
+assert.match(run("", "format", "--bagian=2"), /hanya 1 bagian/)            // bagian di luar jangkauan tidak mencetak ulang
 assert.doesNotMatch(run("", "show", "plan", "A"), /\*\*B\*\*: B\.1/)        // show plan N: checklist hanya N dan pendahulunya
 assert.match(run("", "show", "plan", "B"), /\*\*A\*\*: A\.1[\s\S]*\*\*B\*\*: B\.1/)
 const shown = run("", "show", "A")
