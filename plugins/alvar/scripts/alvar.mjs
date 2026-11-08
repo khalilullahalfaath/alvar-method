@@ -26,6 +26,18 @@ const [cmd, ...pos] = args.filter((a) => !a.startsWith("--"))
 const say = (s) => console.log(s)
 const die = (s) => { fs.writeSync(1, s + "\n"); process.exit(1) } // writeSync: console.log ke pipe Windows asinkron, exit membuang keluaran
 const stdin = () => fs.readFileSync(0, "utf8")
+// Keluaran Bash di atas ~30k karakter dipotong dan disimpan ke file; subagent lalu buang giliran membacanya sepotong-sepotong.
+// Maka konteks panjang dicetak per bagian (potong di batas baris), deterministik untuk perintah yang sama.
+const PAGE = 25000
+const sayPaged = (text) => {
+	const pages = [""]
+	for (const line of text.split("\n")) {
+		if (pages.at(-1).length + line.length + 1 > PAGE && pages.at(-1)) pages.push("")
+		pages[pages.length - 1] += line + "\n"
+	}
+	const k = Math.min(Math.max(+(args.find((a) => a.startsWith("--bagian="))?.slice(9) ?? 1), 1), pages.length)
+	say(pages.length === 1 ? text : `${pages[k - 1]}\n[bagian ${k}/${pages.length}${k < pages.length ? `. Belum selesai: jalankan perintah yang sama dengan --bagian=${k + 1} sebelum menulis apa pun.` : ", selesai."}]`)
+}
 const today = () => new Date().toISOString().slice(0, 10)
 
 const state = (() => { try { return JSON.parse(fs.readFileSync(path.join(A, "state.json"), "utf8")) } catch { return {} } })()
@@ -95,7 +107,7 @@ const toCC = (s) => s.replace(/write_lesson/g, "A lesson").replace(/audit_lesson
 const REVIEW_SYSTEM = `Kamu reviewer rencana belajar yang independen dan skeptis. Kamu TIDAK menulis ulang rencana dan TIDAK mengajar. Nilai rencana (DAG mermaid + checklist subkonsep) terhadap tujuan dan profil pelajar.
 Periksa: (1) akar DAG benar: prasyarat nyata tidak hilang, tidak ada node yang bergantung pada sesuatu yang belum diajarkan; (2) arah panah masuk akal, tidak ada siklus; (3) cakupan: apa yang standar untuk tujuan ini tapi tidak ada di rencana, dan node yang tidak perlu; (4) granularitas: satu node = satu langkah penalaran; (5) kecocokan dengan profil pelajar; (6) klaim faktual yang meragukan.
 Format: baris pertama "VERDICT: APPROVE" atau "VERDICT: REVISE", lalu temuan berkode (P-GAP, P-ORDER, P-SCOPE, P-GRAIN, P-FIT, P-FACT), satu-dua kalimat dengan saran konkret. Ringkas, Bahasa Indonesia, ASCII saja. Jangan memuji.`
-const QUIZ_CC = QUIZ_SYSTEM + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi singkat dan unik.`
+const QUIZ_CC = QUIZ_SYSTEM + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
 
 // ---------- kuis ----------
 const qpath = (node) => path.join(A, "quiz", `${node}.json`)
@@ -218,7 +230,7 @@ const CMDS = {
 		const f = needFile()
 		let learner = ""
 		try { learner = read(path.join(A, "LEARNER.md")) } catch {}
-		say(`${REVIEW_SYSTEM}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`)
+		sayPaged(`${REVIEW_SYSTEM}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`)
 	},
 	"plan-done"() { state.planReviewed = true; saveState(); say("ok") },
 	next() {
@@ -248,7 +260,7 @@ const CMDS = {
 		const f = needFile(), node = pos[0], t = read(f), lesson = nodeSection(t, node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
 		const done = resolvedFor(t, node)
-		say(`${AUDIT_SYSTEM}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
+		sayPaged(`${AUDIT_SYSTEM}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
 	},
 	"audit-save"() {
 		const f = needFile(), node = pos[0]
@@ -279,7 +291,7 @@ const CMDS = {
 	"clar-ctx"() {
 		const f = needFile(), node = pos[0], lesson = nodeSection(read(f), node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
-		say(`${CLARIFY_SYSTEM}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`)
+		sayPaged(`${CLARIFY_SYSTEM}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`)
 	},
 	"clar-save"() {
 		const f = needFile(), node = pos[0], question = state.clarQ ?? die("Belum ada pertanyaan (clar-q).")
@@ -304,7 +316,7 @@ const CMDS = {
 		if (!p) die("Tidak ada soal yang perlu ditulis.")
 		const { t, lesson } = quizGate(node, q.kind === "remedial")
 		const used = q.items.map((i) => i.it.question)
-		say(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${stripLearnerNotes(lesson)}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`)
+		sayPaged(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${stripLearnerNotes(lesson)}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`)
 	},
 	"quiz-save"() {
 		const q = qload(pos[0]), p = q.pending
@@ -362,9 +374,9 @@ const CMDS = {
 	show() {
 		const t = read(needFile()), what = pos[0]
 		if (!what) die("Pakai: show plan | show <node>")
-		if (what === "plan") return say(`${t.split(/^## Node /m)[0]}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
+		if (what === "plan") return sayPaged(`${t.split(/^## Node /m)[0]}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
 		const sec = nodeSection(t, what)
-		sec ? say(lessonOnly(sec)) : die(`Bagian "## Node ${what}" belum ada.`)
+		sec ? sayPaged(lessonOnly(sec)) : die(`Bagian "## Node ${what}" belum ada.`)
 	},
 	"quiz-ans"() {
 		const node = pos[0], q = qload(node), given = JSON.parse(stdin()), out = []
@@ -397,7 +409,7 @@ const CMDS = {
 		const q = qload(pos[0]), todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		if (!todo.length) die("Tidak ada jawaban diketik yang menunggu dinilai (essay-ans dulu).")
 		const body = todo.map((x) => `### Soal ${x.n} (${x.it.type === "cloze" ? "isian" : "esai"})\n${x.it.question}\nRubrik: ${JSON.stringify(x.it.rubric)}\nContoh jawaban: ${x.it.model_answer}\nJawaban pelajar: ${x.answerText}`).join("\n\n")
-		say(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
+		sayPaged(`${GRADE_SYSTEM}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
 	},
 	"typed-save"() {
 		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
@@ -420,7 +432,7 @@ const CMDS = {
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
-		say(`${GRADE_SYSTEM}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
+		sayPaged(`${GRADE_SYSTEM}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
 	},
 	"essay-save"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
