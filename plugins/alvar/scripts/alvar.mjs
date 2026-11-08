@@ -107,6 +107,11 @@ const toCC = (s) => s.replace(/write_lesson/g, "A lesson").replace(/audit_lesson
 const REVIEW_SYSTEM = `Kamu reviewer rencana belajar yang independen dan skeptis. Kamu TIDAK menulis ulang rencana dan TIDAK mengajar. Nilai rencana (DAG mermaid + checklist subkonsep) terhadap tujuan dan profil pelajar.
 Periksa: (1) akar DAG benar: prasyarat nyata tidak hilang, tidak ada node yang bergantung pada sesuatu yang belum diajarkan; (2) arah panah masuk akal, tidak ada siklus; (3) cakupan: apa yang standar untuk tujuan ini tapi tidak ada di rencana, dan node yang tidak perlu; (4) granularitas: satu node = satu langkah penalaran; (5) kecocokan dengan profil pelajar; (6) klaim faktual yang meragukan.
 Format: baris pertama "VERDICT: APPROVE" atau "VERDICT: REVISE", lalu temuan berkode (P-GAP, P-ORDER, P-SCOPE, P-GRAIN, P-FIT, P-FACT), satu-dua kalimat dengan saran konkret. Ringkas, Bahasa Indonesia, ASCII saja. Jangan memuji.`
+// Jawaban klarifikasi hanya dibaca di Obsidian, jadi ditulis LaTeX langsung (core yang dibagi dengan pi tetap ASCII).
+const LATEX = "Notasi matematika dalam LaTeX ($...$ atau $$...$$), tanpa simbol Unicode"
+const CLARIFY_CC = CLARIFY_SYSTEM.includes("ASCII saja (tanpa LaTeX/simbol Unicode)")
+	? CLARIFY_SYSTEM.replace("ASCII saja (tanpa LaTeX/simbol Unicode)", LATEX)
+	: CLARIFY_SYSTEM + `\nAturan ASCII tidak berlaku di sini: ${LATEX}.`
 const QUIZ_CC = QUIZ_SYSTEM + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
 
 // ---------- kuis ----------
@@ -210,6 +215,43 @@ function finalize(q) {
 	return line
 }
 
+// Langkah kuis berikutnya. Dipakai quiz-next, dan ditempel di keluaran perintah simpan supaya tutor tidak perlu memanggil quiz-next lagi.
+function quizNext(node) {
+	let q
+	try { q = JSON.parse(read(qpath(node))) } catch {}
+	if (!q || q.done) { q = startQuiz(node); qsave(q) }
+	if (q.pending) return `WRITE: spawn alvar-quiz-writer (prompt: "node ${node}"). Setelah selesai jalankan lagi quiz-next ${node}.`
+	const round = q.items[q.items.length - 1].round
+	const cur = q.items.filter((i) => i.round === round)
+	const ch = cur.filter((i) => !isTyped(i.it) && !i.ans)
+	if (ch.length) {
+		state.quizOpen = true; saveState()
+		return `ASK: tampilkan lewat AskUserQuestion (maks 4 soal per panggilan, header "Q<n>", multiSelect sesuai multi, opsi persis urutan ini, tanpa Recommended; pelajar mengetik "tidak tahu" di Other kalau tidak tahu). Lalu: A quiz-ans ${node} dengan stdin JSON {"<n>":["label terpilih",...]}.\n${JSON.stringify(ch.slice(0, 4).map(strip))}`
+	}
+	// Soal diketik (isian lalu esai) ditanyakan sekaligus dalam satu pesan, jawabannya dinilai penilai dalam SATU panggilan.
+	const typed = cur.filter((i) => isTyped(i.it) && !i.ans)
+	if (typed.length) {
+		const missing = typed.filter((i) => !i.answerText)
+		if (missing.length) return `TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan semua jawaban verbatim dalam SATU panggilan: A essay-ans ${node} dengan stdin JSON {"<n>": "jawaban nomor itu", ...}.\n${missing.map((i) => `${i.n}) ${i.it.question}`).join("\n")}`
+		return `GRADE: spawn alvar-grader SATU kali (prompt: "node ${node}, semua soal diketik"). Soal: ${typed.map((i) => i.n).join(", ")}.`
+	}
+	const wrong = cur.filter((i) => !i.ans.ok)
+	if (round === 1 && wrong.length) {
+		const angles = ["penerapan kasus baru", "contoh tandingan", "membedakan"]
+		q.pending = { round: 2, slots: wrong.map((w, i) => ({ type: w.it.type, angle: angles[i % angles.length], concept: w.it.concept })), extra: `\nIni soal PENGGANTI untuk konsep yang terjawab salah. Field "concept" tiap soal harus sama dengan slot. Sudut berbeda dari soal sebelumnya.` }
+		qsave(q)
+		return `WRITE: spawn alvar-quiz-writer (prompt: "node ${node}") untuk soal pengganti.`
+	}
+	const line = finalize(q)
+	// Hemat konteks: tiap giliran membaca ulang seluruh percakapan, jadi sesi dipotong per node. Semua state ada di .alvar.
+	const t = read(path.join(A, "sessions", q.file)), ok = okNodes(t)
+	const next = ok.has(node) ? declaredNodes(t)?.find((n) => !ok.has(n)) : node
+	state.resume = { topic: topicOf(t), node, next: next ?? null }
+	saveState()
+	return `DONE\n${line}${ok.has(node) ? `\nKONTEKS: node ${node} tuntas. Setelah pertanyaan pelajar (bila ada) terjawab, tutup giliran dengan: "Ketik /clear lalu 'lanjut' untuk ${next ? `node ${next}` : "fase review"}." Semua progres tersimpan di .alvar.` : ""}`
+}
+const then = (node) => `\n---\nLangkah berikutnya (sudah dijalankan; jangan panggil quiz-next lagi):\n${quizNext(node)}`
+
 // Soal yang diketik pelajar (esai, isian) dinilai penilai; soal pilihan (single, multi) dinilai kode.
 const isTyped = (it) => it.type === "essay" || it.type === "cloze"
 const strip = (i) => ({ n: i.n, q: i.it.question, multi: i.it.type === "multi", opts: i.it.options.map((o) => o.label) })
@@ -254,7 +296,7 @@ const CMDS = {
 		const structure = lessonStructureIssues(cur, node, body)
 		if (structure.length) die(`Materi ${node} ditolak (struktur): ${structure.join("; ")}. Perbaiki lalu tulis ulang seluruh materi.`)
 		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
-		say(`ok ${node} (${body.length} karakter). Tampilkan materi yang sama di chat.`)
+		say(`ok ${node} (${body.length} karakter). Jangan tampilkan materi di chat (pelajar membaca di Obsidian); cukup satu baris bahwa materi ${node} siap di file sesi.`)
 	},
 	"audit-ctx"() {
 		const f = needFile(), node = pos[0], t = read(f), lesson = nodeSection(t, node)
@@ -291,7 +333,7 @@ const CMDS = {
 	"clar-ctx"() {
 		const f = needFile(), node = pos[0], lesson = nodeSection(read(f), node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
-		sayPaged(`${CLARIFY_SYSTEM}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`)
+		sayPaged(`${CLARIFY_CC}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`)
 	},
 	"clar-save"() {
 		const f = needFile(), node = pos[0], question = state.clarQ ?? die("Belum ada pertanyaan (clar-q).")
@@ -305,7 +347,7 @@ const CMDS = {
 		if (issue) t = flag(t, node, "clarify", issue)[0]
 		fs.writeFileSync(f, t)
 		delete state.clarQ; saveState()
-		say(shown + (issue ? `\n[LESSON_ISSUE dicatat: ${issue}. Koreksi materi.]` : "") + (prereq ? `\n[Prasyarat belum diajarkan: ${prereq}.]` : ""))
+		say(`Klarifikasi ${node} (${n}) tersimpan di file sesi (^klar-${node}-${n}). Jangan tampilkan jawabannya di chat; pelajar membacanya di Obsidian.` + (issue ?`\n[LESSON_ISSUE dicatat: ${issue}. Koreksi materi.]` : "") + (prereq ? `\n[Prasyarat belum diajarkan: ${prereq}.]` : ""))
 	},
 	"tq-save"() { const f = needFile(); const q = stdin().trim(); fs.writeFileSync(f, transferEntry(read(f), pos[0], pos[1], q)); say(`Soal tersimpan (${pos[0]} / ${pos[1]})`) },
 	"tq-get"() { const q = transferFor(read(needFile()), pos[0], pos[1]); q === null ? die(`Tolak: soal ${pos[0]} / ${pos[1]} belum tersimpan. Jalankan tq-save dulu.`) : say(`Teks soal yang dinilai:\n${q}`) },
@@ -335,41 +377,7 @@ const CMDS = {
 		qsave(q)
 		say("ok")
 	},
-	"quiz-next"() {
-		const node = pos[0]
-		let q
-		try { q = JSON.parse(read(qpath(node))) } catch {}
-		if (!q || q.done) { q = startQuiz(node); qsave(q) }
-		if (q.pending) return say(`WRITE: spawn alvar-quiz-writer (prompt: "node ${node}"). Setelah selesai jalankan lagi quiz-next ${node}.`)
-		const round = q.items[q.items.length - 1].round
-		const cur = q.items.filter((i) => i.round === round)
-		const ch = cur.filter((i) => !isTyped(i.it) && !i.ans)
-		if (ch.length) {
-			state.quizOpen = true; saveState()
-			return say(`ASK: tampilkan lewat AskUserQuestion (maks 4 soal per panggilan, header "Q<n>", multiSelect sesuai multi, opsi persis urutan ini, tanpa Recommended; pelajar mengetik "tidak tahu" di Other kalau tidak tahu). Lalu: A quiz-ans ${node} dengan stdin JSON {"<n>":["label terpilih",...]}.\n${JSON.stringify(ch.slice(0, 4).map(strip))}`)
-		}
-		// Soal diketik (isian lalu esai) ditanyakan sekaligus dalam satu pesan, jawabannya dinilai penilai dalam SATU panggilan.
-		const typed = cur.filter((i) => isTyped(i.it) && !i.ans)
-		if (typed.length) {
-			const missing = typed.filter((i) => !i.answerText)
-			if (missing.length) return say(`TYPED: ajukan soal berikut di chat dalam SATU pesan, bernomor persis seperti di bawah, lalu tunggu jawaban pelajar. Simpan tiap jawaban verbatim: A essay-ans ${node} <n> (stdin = jawaban nomor itu), satu per soal, lalu quiz-next lagi.\n${missing.map((i) => `${i.n}) ${i.it.question}`).join("\n")}`)
-			return say(`GRADE: spawn alvar-grader SATU kali (prompt: "node ${node}, semua soal diketik"). Soal: ${typed.map((i) => i.n).join(", ")}.`)
-		}
-		const wrong = cur.filter((i) => !i.ans.ok)
-		if (round === 1 && wrong.length) {
-			const angles = ["penerapan kasus baru", "contoh tandingan", "membedakan"]
-			q.pending = { round: 2, slots: wrong.map((w, i) => ({ type: w.it.type, angle: angles[i % angles.length], concept: w.it.concept })), extra: `\nIni soal PENGGANTI untuk konsep yang terjawab salah. Field "concept" tiap soal harus sama dengan slot. Sudut berbeda dari soal sebelumnya.` }
-			qsave(q)
-			return say(`WRITE: spawn alvar-quiz-writer (prompt: "node ${node}") untuk soal pengganti.`)
-		}
-		const line = finalize(q)
-		// Hemat konteks: tiap giliran membaca ulang seluruh percakapan, jadi sesi dipotong per node. Semua state ada di .alvar.
-		const t = read(path.join(A, "sessions", q.file)), ok = okNodes(t)
-		const next = ok.has(node) ? declaredNodes(t)?.find((n) => !ok.has(n)) : node
-		state.resume = { topic: topicOf(t), node, next: next ?? null }
-		saveState()
-		say(`DONE\n${line}${ok.has(node) ? `\nKONTEKS: node ${node} tuntas. Setelah pertanyaan pelajar (bila ada) terjawab, tutup giliran dengan: "Ketik /clear lalu 'lanjut' untuk ${next ? `node ${next}` : "fase review"}." Semua progres tersimpan di .alvar.` : ""}`)
-	},
+	"quiz-next"() { say(quizNext(pos[0])) },
 	// Potongan file sesi; file utuh bisa ratusan ribu karakter dan tidak boleh di-Read utuh.
 	show() {
 		const t = read(needFile()), what = pos[0]
@@ -397,12 +405,18 @@ const CMDS = {
 		}
 		state.quizOpen = false; saveState()
 		qsave(q)
-		say(out.join("\n") + `\nSampaikan hasil + penjelasan singkat, lalu quiz-next ${node}.`)
+		say(out.join("\n") + `\nSampaikan hasil + penjelasan singkat, lalu kerjakan langkah berikutnya.` + then(node))
 	},
 	"essay-ans"() {
-		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
-		if (!i) die("Soal esai atau isian tidak ditemukan.")
-		i.answerText = stdin().trim(); qsave(q); say("ok")
+		const q = qload(pos[0]), raw = stdin().trim()
+		// Utama: stdin JSON {"<n>": "jawaban"} untuk semua soal sekaligus. Bentuk lama tetap jalan: essay-ans N n (stdin = satu jawaban).
+		let given
+		if (pos[1]) given = { [pos[1]]: raw }
+		else try { given = extractJson(raw) } catch { die('REJECT: stdin harus JSON {"<n>": "jawaban", ...}.') }
+		const items = Object.entries(given).map(([n, a]) => [q.items.find((x) => x.n === +n && isTyped(x.it)) ?? die(`Soal esai atau isian ${n} tidak ditemukan.`), a])
+		for (const [i, a] of items) i.answerText = String(a).trim()
+		qsave(q)
+		say(`ok (${items.length} jawaban)` + then(pos[0]))
 	},
 	// Penilaian sekali jalan untuk semua soal diketik (isian dan esai) yang jawabannya sudah disimpan dan belum dinilai.
 	"typed-ctx"() {
@@ -427,7 +441,7 @@ const CMDS = {
 		}
 		qsave(q)
 		const txt = out.join("\n\n")
-		say(isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?"))
+		say((isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
 	},
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
@@ -441,7 +455,7 @@ const CMDS = {
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
 		qsave(q)
 		const txt = `Esai ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(g.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${g.feedback ?? ""}`
-		say(isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?"))
+		say((isAscii(txt) ? txt : txt.replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")) + then(pos[0]))
 	},
 }
 

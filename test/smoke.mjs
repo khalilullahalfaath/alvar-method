@@ -41,28 +41,28 @@ let nxt = run("", "quiz-next", "A")
 assert.match(nxt, /^ASK/)
 const items = JSON.parse(nxt.trim().split("\n").pop())
 const wrongAns = Object.fromEntries(items.map((i) => [i.n, ["tidak tahu"]]))
-assert.match(run(JSON.stringify(wrongAns), "quiz-ans", "A"), /TIDAK TAHU/)
-// soal diketik (isian dan esai) ditanyakan sekaligus; jawab semuanya, minta penilaian, simpan hasil gagal
+// Perintah simpan menempelkan langkah berikutnya; tutor mengikutinya tanpa quiz-next lagi.
+const step = (out) => out.includes("\n---\nLangkah berikutnya") ? out.split("\n---\nLangkah berikutnya")[1].replace(/^[^\n]*\n/, "") : out
+nxt = step(run(JSON.stringify(wrongAns), "quiz-ans", "A"))
+assert.match(nxt, /^(ASK|TYPED)/)
+// soal diketik (isian dan esai) ditanyakan sekaligus; semua jawaban disimpan dalam satu panggilan, penilaian sekali jalan
 const doTyped = (r) => {
 	const ns = [...r.matchAll(/^(\d+)\) /gm)].map((m) => m[1])
-	for (const n of ns) run("jawaban saya", "essay-ans", "A", n)
-	assert.match(run("", "quiz-next", "A"), /^GRADE/)
+	assert.match(step(run(JSON.stringify(Object.fromEntries(ns.map((n) => [n, "jawaban saya"]))), "essay-ans", "A")), /^GRADE/)
 	const results = ns.map((n) => ({ n: +n, pass: false, criteria: [{ criterion: "a", core: true, met: false, evidence: "-" }], feedback: "kurang" }))
 	return run(JSON.stringify({ results }), "typed-save", "A")
 }
-for (let g = 0; g < 4 && !/^TYPED/.test(nxt); g++) {          // soal pilihan bisa 5 -> dua batch AskUserQuestion
-	nxt = run("", "quiz-next", "A")
-	if (/^ASK/.test(nxt)) run(JSON.stringify(Object.fromEntries(JSON.parse(nxt.trim().split("\n").pop()).map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A")
-}
+const ask = (r) => run(JSON.stringify(Object.fromEntries(JSON.parse(r.trim().split("\n").pop()).map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A")
+for (let g = 0; g < 4 && /^ASK/.test(nxt); g++) nxt = step(ask(nxt))   // soal pilihan bisa 5 -> dua batch AskUserQuestion
 assert.match(nxt, /^TYPED/)
-assert.match(doTyped(nxt), /BELUM LULUS/)
-assert.match(run("", "quiz-next", "A"), /pengganti/)                         // putaran 2
+const typedOut = doTyped(nxt)
+assert.match(typedOut, /BELUM LULUS/)
+assert.match(step(typedOut), /pengganti/)                                    // putaran 2, langsung dari typed-save
 assert.match(run(JSON.stringify(mk(slotsOf())), "quiz-save", "A"), /^ok/)
-let r
+let r = run("", "quiz-next", "A")
 for (let g = 0; g < 6; g++) {
-	r = run("", "quiz-next", "A")
-	if (/^ASK/.test(r)) { const it = JSON.parse(r.trim().split("\n").pop()); run(JSON.stringify(Object.fromEntries(it.map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A") }
-	else if (/^TYPED/.test(r)) doTyped(r)
+	if (/^ASK/.test(r)) r = step(ask(r))
+	else if (/^TYPED/.test(r)) r = step(doTyped(r))
 	else break
 }
 assert.match(r, /^DONE/)
