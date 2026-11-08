@@ -1,6 +1,6 @@
 # Format materi node Alvar
 
-Satu-satunya sumber format materi. Alasan dan preferensi di baliknya ada di `.alvar/LEARNER.md` ("What I want in the material"); file ini hanya mengatur bentuknya. Sebagian aturan ditegakkan CLI (`A lesson` menolak) dan auditor; aturan itu ditandai **[CLI]**. Node lama tidak diubah kecuali diminta.
+Satu-satunya sumber format materi. Alasan dan preferensi di baliknya ada di `.alvar/LEARNER.md` ("What I want in the material"); file ini hanya mengatur bentuknya. Sebagian aturan ditegakkan CLI (`A lesson` menolak) dan auditor; aturan itu ditandai **[CLI]**. Aturan bertanda **[pilihan]** adalah bawaan: bila LEARNER.md ("What I want in the material") memilih lain, ikuti LEARNER.md. Node lama tidak diubah kecuali diminta.
 
 ## 1. Kerangka node
 
@@ -20,7 +20,7 @@ Bagian yang tidak menambah apa pun untuk subkonsep itu dilewati, tanpa heading k
 5. **Contoh langsung**: tepat setelah definisi, hukum, atau teorema utama, satu contoh angka atau kasus pendek. Contoh berlabel yang lebih besar boleh menyusul. Contoh pendek tetap klaim dan diaudit.
 6. **Contoh terapan.** (bila perlu): hasil inti diterapkan pada kasus konkret, terpisah dari kasus di Motivasi.
 7. **Konsekuensi dan batas.**: apa yang mengikuti dan kaitannya dengan konsep lain. Kontra-contoh pendek hanya bila syarat penting bisa dibuang untuk menunjukkan kesimpulan gagal. Kesenjangan asumsi teori dan praktik bila ada. Tanpa klaim baru.
-8. **Versi sederhana**: **pendek, 3-5 kalimat** (diputuskan 2026-11-08): alur inti dari masalah ke kesimpulan, dan satu jebakan. Tidak menulis ulang rumus atau contoh; merujuk lewat token label persis (atau nama blok bila tak berlabel). Tidak pernah melonggarkan syarat atau memparafrasekan pernyataan inti dengan syarat yang hilang.
+8. **Versi sederhana** **[pilihan]**: bawaan **pendek, 3-5 kalimat**; LEARNER.md bisa memilih panjang (menelusuri seluruh alur) atau tidak ada. Isinya: alur inti dari masalah ke kesimpulan, dan satu jebakan. Tidak menulis ulang rumus atau contoh; merujuk lewat token label persis (atau nama blok bila tak berlabel). Tidak pernah melonggarkan syarat atau memparafrasekan pernyataan inti dengan syarat yang hilang.
 
 Motivasi dan Intuisi boleh mendahului pernyataan presisi, tetapi tetap ringkas dan di subkonsep yang sama. Pernyataan presisi tidak pernah ditunda ke subkonsep lain.
 
@@ -66,13 +66,13 @@ Teks tebal `**Jelaskan balik**` (bukan heading) di akhir node, diikuti 2-3 butir
 
 ## 7. Gambar, diagram, kode
 
-* Diagram Mermaid (otomatis, tanpa perlu diminta): buat bila **pokok bahasan subkonsep adalah struktur hubungan antarbagian** (urutan, percabangan, keadaan dan transisi, ketergantungan, hierarki dengan kriteria, sebab-akibat) dan struktur itu sulit dipegang lewat prosa saja. Satu blok kode `mermaid` tepat setelah prosa yang menjelaskannya, satu diagram per struktur.
+* Diagram Mermaid **[pilihan]** (bawaan otomatis, tanpa perlu diminta; LEARNER.md bisa memilih "hanya bila diminta"): buat bila **pokok bahasan subkonsep adalah struktur hubungan antarbagian** (urutan, percabangan, keadaan dan transisi, ketergantungan, hierarki dengan kriteria, sebab-akibat) dan struktur itu sulit dipegang lewat prosa saja. Satu blok kode `mermaid` tepat setelah prosa yang menjelaskannya, satu diagram per struktur.
   * Contoh, bukan daftar lengkap: alur proses atau pipeline, pohon keputusan memilih opsi, klasifikasi dengan kriteria di tiap cabang, siklus hidup atau mesin keadaan, struktur bukti panjang, rantai sebab-akibat, struktur argumen tulisan, relasi data atau kelas.
   * Jangan dipaksakan: daftar fakta, definisi tunggal, dan perbandingan sejajar lebih jelas sebagai prosa atau tabel; peta prasyarat antar-node sudah ada di DAG rencana.
   * Diagram melengkapi prosa, tidak menggantikannya. Label simpul pendek dalam tanda kutip, tanpa LaTeX; kriteria percabangan ditulis di label panah. Isinya diaudit: urutan, arah panah, dan kriteria harus benar.
   * Pakai tipe yang lama didukung Obsidian: `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `classDiagram`, `erDiagram`. Hindari tipe baru (mis. `mindmap`) yang mungkin tidak tampil.
-* Gambar SVG: **hanya bila pelajar memintanya** (lewat `alvar:learn-visual`, atau tanda G di checklist yang ditambahkan atas permintaannya). Jangan menambah gambar atas inisiatif sendiri. Proses render-cek ada di agen `alvar-lesson-writer`.
-* Snippet kode: bila node mengajarkan algoritma atau komputasi yang wajar dijalankan, blok ```python pendek berisi intinya di blok inti, tepat setelah rumus atau prosedurnya. Jalankan dulu terhadap contoh angka di materi dan pastikan cocok. Lewati bila tidak ada yang dijalankan. Snippet melengkapi pernyataan presisi, tidak menggantikannya.
+* Gambar SVG **[pilihan]**: bawaan **hanya bila pelajar memintanya** (LEARNER.md bisa memilih "bila sangat membantu") (lewat `alvar:learn-visual`, atau tanda G di checklist). Dengan bawaan ini, jangan menambah gambar atas inisiatif sendiri. Proses render-cek ada di agen `alvar-lesson-writer`.
+* Snippet kode **[pilihan]** (bawaan ada; LEARNER.md bisa memilih tidak ada): bila node mengajarkan algoritma atau komputasi yang wajar dijalankan, blok ```python pendek berisi intinya di blok inti, tepat setelah rumus atau prosedurnya. Jalankan dulu terhadap contoh angka di materi dan pastikan cocok. Lewati bila tidak ada yang dijalankan. Snippet melengkapi pernyataan presisi, tidak menggantikannya.
 
 ## 8. Bahasa dan notasi
 
