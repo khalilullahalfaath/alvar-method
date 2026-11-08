@@ -15,7 +15,12 @@ const state = (() => { try { return JSON.parse(fs.readFileSync(sp, "utf8")) } ca
 const out = (o) => { fs.writeSync(1, JSON.stringify({ hookSpecificOutput: o })); process.exit(0) }
 
 if (ev === "start") {
-	if (state.injected) { state.injected = ""; fs.writeFileSync(sp, JSON.stringify(state)) }
+	state.injected = ""
+	// Sesi Claude Code aktif. Setelah /clear atau compact konteks sudah terpangkas, jadi gate /clear dilepas
+	// (tidak bergantung pada apakah /clear membuat session_id baru).
+	state.session = input.session_id ?? null
+	if ((input.source === "compact" || input.source === "clear") && state.resume) state.resume.session = null
+	fs.writeFileSync(sp, JSON.stringify(state))
 	const r = state.resume
 	const resume = r && state.phase === "teach" ? `\nLanjutan Alvar (fase teach, topik ${r.topic}): node terakhir ${r.node}. ${r.next ? `Bila pelajar bilang lanjut: A next ${r.next} --topic=${r.topic}.` : "Semua node tuntas: A phase review."} Rencana dan status node: A show plan --topic=${r.topic}.` : ""
 	out({ hookEventName: "SessionStart", additionalContext: `Alvar aktif. Bila CLAUDE_PLUGIN_ROOT tidak terisi, A = ${ALVAR}${resume}` })
@@ -36,6 +41,11 @@ if (ev === "start") {
 	if (input.tool_name === "Bash" && /\b(cat|type|Get-Content)\s+[^|;&]*\.alvar\/sessions\//.test(blob)) deny(SESS)
 	if (/\.alvar\/sessions\//.test(blob) && /review_verdict:\s*READY/.test(blob) && state.phase !== "review")
 		deny("review_verdict: READY hanya boleh ditulis saat fase review (alvar phase review, lalu audit).")
+	// Gate /clear: node baru ditolak di sesi yang sama dengan node yang baru tuntas (konteks lama ikut terbaca tiap giliran).
+	const nx = input.tool_name === "Bash" && blob.match(/(?:alvar\.mjs"?|\bA)\s+next\s+([A-Za-z0-9]+)/)?.[1]
+	const r = state.resume
+	if (nx && r?.session && r.session === input.session_id && nx !== r.node && !blob.includes("--tanpa-clear"))
+		deny(`Node ${r.node} sudah tuntas di sesi ini. Minta pelajar mengetik /clear lalu 'lanjut' (progres aman di .alvar; konteks lama tidak ikut terbaca). Bila pelajar menolak /clear, ulangi perintah dengan --tanpa-clear.`)
 	if (input.tool_name === "AskUserQuestion" && state.phase === "teach" && !state.quizOpen)
 		deny("Di fase teach, soal hanya lewat alvar quiz-next (jangan buat soal sendiri).")
 }

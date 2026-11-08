@@ -29,15 +29,31 @@ const stdin = () => fs.readFileSync(0, "utf8")
 // Keluaran Bash di atas ~30k karakter dipotong dan disimpan ke file; subagent lalu buang giliran membacanya sepotong-sepotong.
 // Maka konteks panjang dicetak per bagian (potong di batas baris), deterministik untuk perintah yang sama.
 const PAGE = 25000
-const sayPaged = (text) => {
+// key: konteks yang harus dibaca utuh sebelum perintah simpan pasangannya diterima (lihat needPaged).
+const sayPaged = (text, key) => {
 	const pages = [""]
 	for (const line of text.split("\n")) {
 		if (pages.at(-1).length + line.length + 1 > PAGE && pages.at(-1)) pages.push("")
 		pages[pages.length - 1] += line + "\n"
 	}
 	const k = Math.min(Math.max(+(args.find((a) => a.startsWith("--bagian="))?.slice(9) ?? 1), 1), pages.length)
+	if (key) {
+		state.paged ??= {}
+		const p = state.paged[key]?.pages === pages.length ? state.paged[key] : { pages: pages.length, seen: [] }
+		if (!p.seen.includes(k)) p.seen.push(k)
+		state.paged[key] = p
+		saveState()
+	}
 	say(pages.length === 1 ? text : `${pages[k - 1]}\n[bagian ${k}/${pages.length}${k < pages.length ? `. Belum selesai: jalankan perintah yang sama dengan --bagian=${k + 1} sebelum menulis apa pun.` : ", selesai."}]`)
 }
+// Gate: simpan ditolak bila konteksnya dicetak berbagian dan ada bagian yang belum dibaca.
+const needPaged = (key, ctxCmd) => {
+	const p = state.paged?.[key]
+	if (!p) return
+	const missing = Array.from({ length: p.pages }, (_, i) => i + 1).filter((i) => !p.seen.includes(i))
+	if (missing.length) die(`REJECT: konteks belum dibaca utuh. Jalankan ${ctxCmd} --bagian=${missing.join(", --bagian=")} dulu, lalu tulis ulang berdasarkan seluruh konteks.`)
+}
+const donePaged = (key) => { if (state.paged?.[key]) { delete state.paged[key]; saveState() } }
 const today = () => new Date().toISOString().slice(0, 10)
 
 const state = (() => { try { return JSON.parse(fs.readFileSync(path.join(A, "state.json"), "utf8")) } catch { return {} } })()
@@ -125,7 +141,7 @@ const CLARIFY_CC = langify(CLARIFY_SYSTEM.includes("ASCII saja (tanpa LaTeX/simb
 const ASCII_RULE = /Semua teks ASCII saja \(tanpa LaTeX, tanpa simbol Unicode\)|ASCII saja/
 const LATEX_QUIZ = `Notasi matematika WAJIB LaTeX dalam $...$ (mis. $x^2$, $\\sum_{i=1}^{n} x_i$, $\\frac{a}{b}$), tanpa simbol matematika Unicode.${ASCII_CHAT ? " CLI mengubah LaTeX ke ASCII untuk terminal, jadi jangan menulis versi ASCII" : ""}`
 const latexify = (sys) => langify(ASCII_RULE.test(sys) ? sys.replace(ASCII_RULE, LATEX_QUIZ) : `${sys}\n${LATEX_QUIZ}.`)
-const GRADE_CC = latexify(GRADE_SYSTEM)
+const GRADE_CC = latexify(GRADE_SYSTEM) + "\nBila feedback mengutip jawaban pelajar yang berupa notasi ASCII, tulis kutipan itu dalam backtick; notasi milikmu sendiri tetap LaTeX."
 const REVIEW_CC = langify(REVIEW_SYSTEM)
 const AUDIT_CC = langify(AUDIT_SYSTEM)
 // Simbol matematika Unicode (bukan teks berbahasa apa pun) harus ditulis LaTeX.
@@ -157,6 +173,11 @@ function toAscii(s) {
 const asciiMath = (s) => {
 	const t = String(s ?? "").replace(/\$\$[\s\S]*?\$\$/g, "").replace(/\$[^$]*\$/g, "").replace(/`[^`]*`/g, "")
 	return /\b[A-Za-z]\^[\w*{(]/.test(t) || /\b[A-Za-z]_[\w{]/.test(t) || /\b(sqrt|sum_)\b/.test(t)
+}
+// Umpan balik grader masuk log file sesi, jadi wajib LaTeX. Bukti (evidence) mengutip jawaban pelajar dan tidak diperiksa.
+const gradeLatexGate = (rs) => {
+	const bad = rs.filter((r) => asciiMath(r.feedback) || (r.criteria ?? []).some((c) => asciiMath(c.criterion))).map((r) => r.n)
+	if (bad.length) die(`REJECT: umpan balik soal ${bad.join(", ")} memuat notasi matematika ASCII di luar $...$. Spawn ulang alvar-grader dengan pesan ini; kutipan jawaban pelajar ditulis dalam backtick.`)
 }
 const QUIZ_CC = latexify(QUIZ_SYSTEM) + `\nBatas alat: maksimal 4 opsi per soal (single: 3-4 opsi; multi: 4 opsi dengan 2-3 kunci). Label opsi unik dan berupa pernyataan lengkap, minimal 6 karakter: bukan satu kata, angka, atau huruf saja (tulis "Kiro, asisten pengembang berbasis agen", bukan "Kiro"; "Akurasi validasi 0,85", bukan "0,85"). Panjang opsi seimbang: opsi terpanjang paling banyak dua kali opsi terpendek ditambah 10 karakter.`
 
@@ -253,8 +274,8 @@ function finalize(q) {
 		const mf = mapRel()
 		if (mf && fs.existsSync(mf)) fs.writeFileSync(mf, stamp(upsertRow(read(mf), "Node status (otomatis dari write_quiz)", NODE_HDR, [node, ns, `${results.filter((r) => r.ok).length}/${results.length} benar`, `[[${path.basename(file, ".md")}]]`], [0])))
 		const gaps = Object.entries(cs).filter(([c, st]) => st === "edge" && results.filter((r) => r.it.concept === c).every((r) => r.ok) && !results.some((r) => r.it.concept === c && r.ok && r.it.angle !== "definisi")).map(([c]) => c)
-		const gapNote = gaps.length ? `\nASSESSMENT_GAP: ${gaps.join(", ")} edge walau semua jawaban benar karena butir soalnya hanya bersudut "definisi". Ini celah soal, bukan celah pelajar. Jangan bebankan ke pelajar; jalankan quiz-next lagi hanya untuk subkonsep itu dan catat di ## Provenance (K-AMBIG).` : ""
-		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}${gapNote}\nEdge: jelaskan bagian lemah, tawarkan quiz-next lagi atau --remedial.`
+		const gapNote = gaps.length ? `\nASSESSMENT_GAP: ${gaps.join(", ")} edge walau semua jawaban benar karena butir soalnya hanya bersudut "definisi". Ini celah soal, bukan celah pelajar. Jangan bebankan ke pelajar; jalankan A quiz-next ${node} --ulang hanya untuk subkonsep itu dan catat di ## Provenance (K-AMBIG).` : ""
+		line = `Kuis ${node} selesai; dicatat ke sesi, Ledger, map.\n${results.map((r) => `Q${r.n} (${r.it.type}, ${r.it.concept}): ${r.dontKnow ? "tidak tahu" : r.ok ? "benar" : "salah"}${r.round === 2 ? " [pengganti]" : ""}`).join("\n")}\nStatus node: ${ns}. Subkonsep: ${JSON.stringify(cs)}.${q.issue ? `\nLESSON_ISSUE (dicatat K-FLAG): ${q.issue}. Sampaikan dan koreksi materi.` : ""}${gapNote}\nEdge: jelaskan bagian lemah, tawarkan A quiz-next ${node} --ulang atau --remedial.`
 	}
 	q.done = true
 	qsave(q)
@@ -265,7 +286,11 @@ function finalize(q) {
 function quizNext(node) {
 	let q
 	try { q = JSON.parse(read(qpath(node))) } catch {}
-	if (!q || q.done) { q = startQuiz(node); qsave(q) }
+	if (!q || q.done) {
+		// Gate: kuis yang sudah selesai tidak dimulai ulang diam-diam (mis. quiz-next dipanggil lagi setelah DONE).
+		if (q?.done && !REMEDIAL && !args.includes("--ulang")) return `SELESAI: kuis ${node} sudah tuntas dan dicatat. Jangan memulai kuis baru kecuali pelajar memintanya: A quiz-next ${node} --ulang (atau --remedial untuk subkonsep yang belum locked).`
+		q = startQuiz(node); qsave(q)
+	}
 	if (q.pending) return `WRITE: spawn alvar-quiz-writer (prompt: "node ${node}"). Setelah selesai jalankan lagi quiz-next ${node}.`
 	const round = q.items[q.items.length - 1].round
 	const cur = q.items.filter((i) => i.round === round)
@@ -292,7 +317,8 @@ function quizNext(node) {
 	// Hemat konteks: tiap giliran membaca ulang seluruh percakapan, jadi sesi dipotong per node. Semua state ada di .alvar.
 	const t = read(path.join(A, "sessions", q.file)), ok = okNodes(t)
 	const next = ok.has(node) ? declaredNodes(t)?.find((n) => !ok.has(n)) : node
-	state.resume = { topic: topicOf(t), node, next: next ?? null }
+	// session: sesi Claude Code saat node ini tuntas (dicatat hook SessionStart); hook menolak node baru di sesi yang sama sebelum /clear.
+	state.resume = { topic: topicOf(t), node, next: next ?? null, session: ok.has(node) ? state.session ?? null : null }
 	saveState()
 	return `DONE\n${line}${ok.has(node) ? `\nKONTEKS: node ${node} tuntas. Setelah pertanyaan pelajar (bila ada) terjawab, tutup giliran dengan: "Ketik /clear lalu 'lanjut' untuk ${next ? `node ${next}` : "fase review"}." Semua progres tersimpan di .alvar.` : ""}`
 }
@@ -318,9 +344,9 @@ const CMDS = {
 		const f = needFile()
 		let learner = ""
 		try { learner = read(path.join(A, "LEARNER.md")) } catch {}
-		sayPaged(`${REVIEW_CC}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`)
+		sayPaged(`${REVIEW_CC}\n\n## Profil pelajar\n${learner || "(tidak ada)"}\n\n## Sesi (rencana)\n${read(f).split(/^## Node /m)[0]}`, "plan")
 	},
-	"plan-done"() { state.planReviewed = true; saveState(); say("ok") },
+	"plan-done"() { needPaged("plan", "plan-ctx"); state.planReviewed = true; donePaged("plan"); saveState(); say("ok") },
 	next() {
 		const f = needFile()
 		const t = read(f)
@@ -350,9 +376,10 @@ const CMDS = {
 		const f = needFile(), node = pos[0], t = read(f), lesson = nodeSection(t, node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
 		const done = resolvedFor(t, node)
-		sayPaged(`${AUDIT_CC}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`)
+		sayPaged(`${AUDIT_CC}\n\n## Rencana node\n${checklistOf(t, node)}\n\n## Materi\n${stripLearnerNotes(lesson)}${done.length ? `\n\n## Sudah diperbaiki (jangan diajukan ulang)\n${done.map((d) => `- ${d}`).join("\n")}` : ""}`, `audit:${node}`)
 	},
 	"audit-save"() {
+		needPaged(`audit:${pos[0]}`, `audit-ctx ${pos[0]}`)
 		const f = needFile(), node = pos[0]
 		let t = read(f)
 		const lesson = nodeSection(t, node)
@@ -381,9 +408,10 @@ const CMDS = {
 	"clar-ctx"() {
 		const f = needFile(), node = pos[0], lesson = nodeSection(read(f), node)
 		if (!lesson) die(`Bagian "## Node ${node}" belum ada.`)
-		sayPaged(`${CLARIFY_CC}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`)
+		sayPaged(`${CLARIFY_CC}\n\n## Materi node\n${lesson}\n\n## Pertanyaan pelajar\n${state.clarQ ?? die("Belum ada pertanyaan (clar-q).")}`, `clar:${node}`)
 	},
 	"clar-save"() {
+		needPaged(`clar:${pos[0]}`, `clar-ctx ${pos[0]}`)
 		const f = needFile(), node = pos[0], question = state.clarQ ?? die("Belum ada pertanyaan (clar-q).")
 		let t = read(f)
 		const answer = stdin().replace(/<think>[\s\S]*?<\/think>/g, "").trim()
@@ -408,9 +436,10 @@ const CMDS = {
 		if (!p) die("Tidak ada soal yang perlu ditulis.")
 		const { t, lesson } = quizGate(node, q.kind === "remedial")
 		const used = q.items.map((i) => i.it.question)
-		sayPaged(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${stripLearnerNotes(lesson)}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`)
+		sayPaged(`${QUIZ_CC}\n\n## Checklist subkonsep\n${checklistOf(t, node)}\n\n## Materi node (termasuk klarifikasi)\n${stripLearnerNotes(lesson)}\n\n## Slot\n${JSON.stringify(p.slots)}\n${p.extra}${used.length ? `\n## Soal yang sudah dipakai (jangan diulang)\n${used.join("\n")}` : ""}`, `quiz:${node}`)
 	},
 	"quiz-save"() {
+		needPaged(`quiz:${pos[0]}`, `quiz-ctx ${pos[0]}`)
 		const q = qload(pos[0]), p = q.pending
 		if (!p) die("Tidak ada soal yang menunggu.")
 		let out
@@ -489,14 +518,16 @@ const CMDS = {
 		const q = qload(pos[0]), todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		if (!todo.length) die("Tidak ada jawaban diketik yang menunggu dinilai (essay-ans dulu).")
 		const body = todo.map((x) => `### Soal ${x.n} (${x.it.type === "cloze" ? "isian" : "esai"})\n${x.it.question}\nRubrik: ${JSON.stringify(x.it.rubric)}\nContoh jawaban: ${x.it.model_answer}\nJawaban pelajar: ${x.answerText}`).join("\n\n")
-		sayPaged(`${GRADE_CC}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`)
+		sayPaged(`${GRADE_CC}\n\nBeberapa soal sekaligus. Untuk isian, nilai jawaban singkatnya terhadap rubrik (variasi penulisan yang sah dihitung benar). Keluaran HANYA JSON {"results": [ {"n": <nomor soal>, "pass": true|false, "criteria": [...], "feedback": "..."} ]} dengan satu entri per soal di bawah, nomor persis sama.\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal yang dinilai\n${body}`, `typed:${pos[0]}`)
 	},
 	"typed-save"() {
+		needPaged(`typed:${pos[0]}`, `typed-ctx ${pos[0]}`)
 		const q = qload(pos[0]), g = extractJson(stdin()), rs = Array.isArray(g) ? g : g.results
 		if (!Array.isArray(rs) || !rs.length) die("REJECT: JSON harus berisi results[] satu entri per soal.")
 		const todo = q.items.filter((x) => isTyped(x.it) && x.answerText && !x.ans)
 		const missing = todo.filter((x) => !rs.some((r) => +r.n === x.n)).map((x) => x.n)
 		if (missing.length) die(`REJECT: soal ${missing.join(", ")} belum dinilai. Kirim ulang results[] lengkap.`)
+		gradeLatexGate(rs)
 		const out = []
 		for (const r of rs) {
 			const i = todo.find((x) => x.n === +r.n)
@@ -513,12 +544,14 @@ const CMDS = {
 	"essay-ctx"() {
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
-		sayPaged(`${GRADE_CC}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`)
+		sayPaged(`${GRADE_CC}\n\n## Materi\n${stripLearnerNotes(nodeSection(read(path.join(A, "sessions", q.file)), q.node))}\n\n## Soal\n${i.it.question}\n\n## Rubrik\n${JSON.stringify(i.it.rubric)}\n\n## Contoh jawaban\n${i.it.model_answer}\n\n## Jawaban pelajar\n${i.answerText}`, `essay:${pos[0]}:${pos[1]}`)
 	},
 	"essay-save"() {
+		needPaged(`essay:${pos[0]}:${pos[1]}`, `essay-ctx ${pos[0]} ${pos[1]}`)
 		const q = qload(pos[0]), i = q.items.find((x) => x.n === +pos[1] && isTyped(x.it))
 		if (!i?.answerText) die("Jawaban esai belum disimpan (essay-ans).")
 		const g = extractJson(stdin()), sc = scoreEssay(g.criteria)
+		gradeLatexGate([{ n: pos[1], ...g }])
 		i.ans = { ok: sc.pass, score: sc.score, answer: i.answerText, criteria: g.criteria, feedback: g.feedback }
 		qsave(q)
 		let txt = `Esai ${i.n}: ${sc.pass ? "LULUS" : "BELUM LULUS"} (skor ${Math.round(sc.score * 100)}%)\n${(g.criteria ?? []).map((c) => `${c.met ? "[v]" : "[ ]"} ${c.core ? "[inti] " : ""}${c.criterion}`).join("\n")}\n${g.feedback ?? ""}`

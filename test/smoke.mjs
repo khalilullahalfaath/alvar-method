@@ -56,6 +56,8 @@ const doTyped = (r) => {
 	const ns = [...r.matchAll(/^(\d+)\) /gm)].map((m) => m[1])
 	assert.match(step(run(JSON.stringify(Object.fromEntries(ns.map((n) => [n, "jawaban saya"]))), "essay-ans", "A")), /^GRADE/)
 	const results = ns.map((n) => ({ n: +n, pass: false, criteria: [{ criterion: "a", core: true, met: false, evidence: "-" }], feedback: "kurang" }))
+	const asciiFb = results.map((x) => ({ ...x, feedback: "nilai x^2 salah" }))
+	assert.match(run(JSON.stringify({ results: asciiFb }), "typed-save", "A"), /REJECT[\s\S]*ASCII/)   // gate: umpan balik grader wajib LaTeX
 	return run(JSON.stringify({ results }), "typed-save", "A")
 }
 const ask = (r) => run(JSON.stringify(Object.fromEntries(JSON.parse(r.trim().split("\n").pop()).map((i) => [i.n, ["tidak tahu"]]))), "quiz-ans", "A")
@@ -73,6 +75,7 @@ for (let g = 0; g < 6; g++) {
 }
 assert.match(r, /^DONE/)
 assert.doesNotMatch(r, /KONTEKS/)                                            // node belum tuntas: tidak diajak /clear
+assert.match(run("", "quiz-next", "A"), /^SELESAI/)                          // gate: kuis selesai tidak dimulai ulang diam-diam
 assert.match(run("", "show", "plan"), /flowchart TD[\s\S]*Node status \(map\)[\s\S]*\| A \|/)
 const shown = run("", "show", "A")
 assert.match(shown, /### A\.1 Satu/); assert.doesNotMatch(shown, /Kuis formatif/) // materi saja, tanpa kuis
@@ -96,6 +99,19 @@ assert.equal(hook("prompt"), "")                       // aturan fase sudah disu
 assert.match(hook("start"), /Alvar aktif[\s\S]*node terakhir A[\s\S]*A next A --topic=demo/) // lanjutan setelah /clear
 assert.match(hook("prompt"), /FASE TEACH/)             // setelah compact/resume, disuntik lagi sekali
 assert.equal(hook("prompt"), "")
+// gate /clear: node baru ditolak di sesi yang sama dengan node yang baru tuntas
+const stF = path.join(cwd, ".alvar", "state.json")
+const st = JSON.parse(fs.readFileSync(stF, "utf8")); st.resume = { topic: "demo", node: "A", next: "B", session: "s1" }; fs.writeFileSync(stF, JSON.stringify(st))
+const nextB = (sid, extra = "") => hook("pre", { session_id: sid, tool_name: "Bash", tool_input: { command: `node alvar.mjs next B${extra} --topic=demo` } })
+assert.match(nextB("s1"), /deny.*\/clear/)
+assert.equal(nextB("s1", " --tanpa-clear"), "")                                // pelajar menolak /clear
+assert.equal(nextB("s2"), "")                                                  // sesi baru setelah /clear
+assert.equal(hook("pre", { session_id: "s1", tool_name: "Bash", tool_input: { command: "A next A" } }), "") // node yang sama boleh
+hook("start", { session_id: "s1", source: "compact" })
+assert.equal(nextB("s1"), "")                                                  // compact sudah memangkas konteks
+const st2 = JSON.parse(fs.readFileSync(stF, "utf8")); st2.resume.session = "s1"; fs.writeFileSync(stF, JSON.stringify(st2))
+hook("start", { session_id: "s1", source: "clear" })
+assert.equal(nextB("s1"), "")                                                  // /clear melepas gate walau session_id sama
 // --- pengaturan pelajar dari frontmatter LEARNER.md ---
 const setLearner = (fm) => fs.writeFileSync(path.join(cwd, ".alvar", "LEARNER.md"), `---\n${fm}\n---\n# Learner\n`)
 const clar = (ans) => { run("apa itu?", "clar-q", "A"); return run(ans, "clar-save", "A") }
@@ -107,4 +123,12 @@ setLearner("language: English\nchat_math: ascii\nreader: chat")
 assert.match(clar("Jawab $x^{2}$."), /Tampilkan jawaban ini[\s\S]*Jawab x\^2\./)         // reader chat + ASCII: dikonversi
 setLearner("reader: editor")
 assert.match(clar("Jawab."), /membacanya di editor Markdown/)
+// gate paging: konteks berbagian harus dibaca utuh sebelum simpan
+fs.writeFileSync(path.join(cwd, ".alvar", "LEARNER.md"), "# Learner\n" + "baris profil panjang\n".repeat(1600))
+assert.match(run("", "plan-ctx"), /\[bagian 1\/2/)
+assert.match(run("", "plan-done"), /REJECT[\s\S]*--bagian=2/)
+assert.match(run("", "plan-ctx", "--bagian=2"), /\[bagian 2\/2, selesai/)
+assert.match(run("", "plan-done"), /^ok/)
+// gate kuis ulang: --ulang memulai kuis baru secara eksplisit
+assert.doesNotMatch(run("", "quiz-next", "A", "--ulang"), /^SELESAI/)
 console.log("smoke ok")

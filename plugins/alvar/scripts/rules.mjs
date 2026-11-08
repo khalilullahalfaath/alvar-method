@@ -28,7 +28,7 @@ export const RULES = {
    - TYPED: soal isian dan esai ditanyakan sekaligus di chat dalam satu pesan bernomor, tunggu jawaban, simpan semua jawaban verbatim dalam SATU panggilan A essay-ans N (stdin JSON {"<n>": "jawaban"}), keluarannya memberi GRADE: spawn alvar-grader SATU kali ("node N, semua soal diketik"), simpan dengan A typed-save N, sampaikan hasilnya.
    - quiz-ans, essay-ans, typed-save, dan essay-save sudah menempelkan langkah berikutnya di keluarannya; ikuti itu langsung, jangan panggil quiz-next lagi.
    - Selalu sertakan --topic=<slug> pada prompt subagent dan pada tiap perintah A.
-6. Hasil menyebut LESSON_ISSUE: laporkan ke pelajar dan koreksi materi. Status edge: jelaskan bagian lemah, tawarkan A quiz-next N lagi atau A quiz-next N --remedial.
+6. Hasil menyebut LESSON_ISSUE: laporkan ke pelajar dan koreksi materi. Status edge: jelaskan bagian lemah, tawarkan A quiz-next N --ulang atau A quiz-next N --remedial (kuis yang sudah selesai tidak dimulai ulang tanpa salah satu flag itu).
 - Soal transfer di luar kuis: A tq-save N strand (stdin soal) sebelum jawaban diterima; A tq-get N strand sebelum menilai.
 - Kesalahan tutor tidak dibebankan ke pelajar. Map dan Ledger diisi CLI; jangan tulis status known sendiri.
 - Hemat konteks: jangan Read file sesi utuh (hook menolak). Pakai A show plan (DAG, checklist, status node) dan A show N (materi satu node); untuk Edit, Grep -n lalu Read dengan offset/limit. Bila DONE memuat KONTEKS, sampaikan ajakan /clear itu ke pelajar.`,
