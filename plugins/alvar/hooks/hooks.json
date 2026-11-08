@@ -7,7 +7,7 @@
       { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\" prompt" }] }
     ],
     "SessionStart": [
-      { "matcher": "compact|resume|startup", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\" start" }] }
+      { "matcher": "clear|compact|resume|startup", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\" start" }] }
     ]
   }
 }

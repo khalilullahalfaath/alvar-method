@@ -65,16 +65,19 @@ function dagEdges(text) {
 	}
 	return edges
 }
+const declaredNodes = (t) => t.match(/^nodes:\s*\[(.*)\]/m)?.[1].split(",").map((s) => s.trim()).filter(Boolean)
+const mapStatusSection = (t) => {
+	let m = ""
+	try { m = read(path.join(A, "maps", (TOPIC ?? topicOf(t)) + ".md")) } catch {}
+	return m.split(/^## Node status.*$/m)[1]?.split(/^## /m)[0] ?? ""
+}
+const okNodes = (t) => new Set([...mapStatusSection(t).matchAll(/^\|\s*([A-Za-z0-9]+)\s*\|\s*(known|locked)\s*\|/gim)].map((r) => r[1]))
 function dagGate(file, node) {
 	const t = read(file)
 	if (nodeSection(t, node).replace(/^## Node .*$/m, "").trim()) return // sudah diajarkan: gate hanya untuk node baru
-	const declared = t.match(/^nodes:\s*\[(.*)\]/m)?.[1].split(",").map((s) => s.trim()).filter(Boolean)
+	const declared = declaredNodes(t)
 	if (!declared?.includes(node)) return
-	const mapFile = path.join(A, "maps", (TOPIC ?? topicOf(t)) + ".md")
-	let m = ""
-	try { m = read(mapFile) } catch {}
-	const sec = m.split(/^## Node status.*$/m)[1]?.split(/^## /m)[0] ?? ""
-	const ok = new Set([...sec.matchAll(/^\|\s*([A-Za-z0-9]+)\s*\|\s*(known|locked)\s*\|/gim)].map((r) => r[1]))
+	const ok = okNodes(t)
 	const preds = [...new Set(dagEdges(t).filter(([a, b]) => b === node && declared.includes(a)).map(([a]) => a))]
 	const open = preds.filter((p) => !ok.has(p))
 	if (!open.length) return
@@ -347,7 +350,21 @@ const CMDS = {
 			qsave(q)
 			return say(`WRITE: spawn alvar-quiz-writer (prompt: "node ${node}") untuk soal pengganti.`)
 		}
-		say("DONE\n" + finalize(q))
+		const line = finalize(q)
+		// Hemat konteks: tiap giliran membaca ulang seluruh percakapan, jadi sesi dipotong per node. Semua state ada di .alvar.
+		const t = read(path.join(A, "sessions", q.file)), ok = okNodes(t)
+		const next = ok.has(node) ? declaredNodes(t)?.find((n) => !ok.has(n)) : node
+		state.resume = { topic: topicOf(t), node, next: next ?? null }
+		saveState()
+		say(`DONE\n${line}${ok.has(node) ? `\nKONTEKS: node ${node} tuntas. Setelah pertanyaan pelajar (bila ada) terjawab, tutup giliran dengan: "Ketik /clear lalu 'lanjut' untuk ${next ? `node ${next}` : "fase review"}." Semua progres tersimpan di .alvar.` : ""}`)
+	},
+	// Potongan file sesi; file utuh bisa ratusan ribu karakter dan tidak boleh di-Read utuh.
+	show() {
+		const t = read(needFile()), what = pos[0]
+		if (!what) die("Pakai: show plan | show <node>")
+		if (what === "plan") return say(`${t.split(/^## Node /m)[0]}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
+		const sec = nodeSection(t, what)
+		sec ? say(lessonOnly(sec)) : die(`Bagian "## Node ${what}" belum ada.`)
 	},
 	"quiz-ans"() {
 		const node = pos[0], q = qload(node), given = JSON.parse(stdin()), out = []

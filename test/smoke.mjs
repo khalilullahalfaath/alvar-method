@@ -66,6 +66,10 @@ for (let g = 0; g < 6; g++) {
 	else break
 }
 assert.match(r, /^DONE/)
+assert.doesNotMatch(r, /KONTEKS/)                                            // node belum tuntas: tidak diajak /clear
+assert.match(run("", "show", "plan"), /flowchart TD[\s\S]*Node status \(map\)[\s\S]*\| A \|/)
+const shown = run("", "show", "A")
+assert.match(shown, /### A\.1 Satu/); assert.doesNotMatch(shown, /Kuis formatif/) // materi saja, tanpa kuis
 assert.match(fs.readFileSync(path.join(S, "2026-01-01-demo.md"), "utf8"), /### Kuis formatif A/)
 assert.match(fs.readFileSync(path.join(M, "demo.md"), "utf8"), /\| A \|/)
 assert.match(run("", "phase", "capstone", "demo"), /Capstone ditolak/)
@@ -75,8 +79,12 @@ assert.match(hook("pre", { tool_name: "Read", tool_input: { file_path: path.join
 assert.match(hook("pre", { tool_name: "Edit", tool_input: { file_path: path.join(cwd, ".alvar", "sessions", "x.md"), new_string: "review_verdict: READY" } }), /deny/)
 assert.match(hook("pre", { tool_name: "AskUserQuestion", tool_input: {} }), /deny/)
 assert.equal(hook("pre", { tool_name: "Bash", tool_input: { command: "node alvar.mjs next A" } }), "")
+const sessF = path.join(S, "2026-01-01-demo.md")
+assert.match(hook("pre", { tool_name: "Read", tool_input: { file_path: sessF } }), /deny.*A show/)   // file sesi utuh ditolak
+assert.equal(hook("pre", { tool_name: "Read", tool_input: { file_path: sessF, offset: 10, limit: 40 } }), "")
+assert.match(hook("pre", { tool_name: "Bash", tool_input: { command: "cat .alvar/sessions/2026-01-01-demo.md" } }), /deny/)
 assert.equal(hook("prompt"), "")                       // aturan fase sudah disuntik oleh 'phase teach'
-assert.match(hook("start"), /Alvar aktif/)
+assert.match(hook("start"), /Alvar aktif[\s\S]*node terakhir A[\s\S]*A next A --topic=demo/) // lanjutan setelah /clear
 assert.match(hook("prompt"), /FASE TEACH/)             // setelah compact/resume, disuntik lagi sekali
 assert.equal(hook("prompt"), "")
 console.log("smoke ok")

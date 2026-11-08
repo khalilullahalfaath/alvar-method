@@ -10,7 +10,7 @@ Prompt memuat id node (satu atau dua, ditulis berurutan), `--topic=<slug>`, dan 
 
 BACA DULU (Read):
 1. `.alvar/LEARNER.md` (profil pelajar, bagian "Narrative flow").
-2. Berkas sesi topik (`.alvar/sessions/*-<slug>.md`): (a) baris checklist node kamu (grep `^- \*\*<node>\*\*`) dan DAG prasyarat di bagian atas, (b) bagian `## Node <prasyarat>` yang relevan, (c) satu bagian node yang sudah ada sebagai contoh gaya penuh (pilih node terbaru bertipe serupa).
+2. Berkas sesi topik, JANGAN di-Read utuh (hook menolak; isinya bisa ratusan ribu karakter). Pakai CLI `node "${CLAUDE_PLUGIN_ROOT}/scripts/alvar.mjs" <perintah> --topic=<slug>`: (a) `show plan` untuk DAG, checklist node kamu, dan status node; (b) `show <prasyarat>` untuk bagian node prasyarat yang relevan; (c) `show <node>` untuk satu node yang sudah ada sebagai contoh gaya penuh (pilih node terbaru bertipe serupa).
 Node lain yang sedang ditulis paralel mungkin belum ada: jangan bergantung pada isinya; sebut prasyarat dengan id node saja.
 
 FORMAT (wajib):
