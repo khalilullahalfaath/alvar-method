@@ -17,6 +17,7 @@ fs.writeFileSync(path.join(M, "demo.md"), `---\nupdated: 2026-01-01\n---\n# Map\
 assert.match(run("", "phase", "teach"), /FASE TEACH/)
 assert.match(run("", "format"), /^# Format materi node Alvar[\s\S]*Jelaskan balik/)   // sumber tunggal format terbaca lewat CLI
 assert.match(run("", "next", "A"), /alvar lesson|A lesson/)
+assert.match(run("", "next"), /^Langkah berikutnya A:/)               // tanpa id: node pertama yang belum known/locked
 assert.match(run("", "next", "B"), /Ditolak oleh DAG.*A/)            // gate DAG: pendahulu A belum known
 assert.match(run("", "next", "B", "--lewati"), /DAG dilewati/)       // dilewati eksplisit
 const JB = "\n\n**Jelaskan balik**\n1. Mengapa?\n2. Apa yang rusak bila syaratnya dibuang?"
@@ -104,6 +105,7 @@ const stF = path.join(cwd, ".alvar", "state.json")
 const st = JSON.parse(fs.readFileSync(stF, "utf8")); st.resume = { topic: "demo", node: "A", next: "B", session: "s1" }; fs.writeFileSync(stF, JSON.stringify(st))
 const nextB = (sid, extra = "") => hook("pre", { session_id: sid, tool_name: "Bash", tool_input: { command: `node alvar.mjs next B${extra} --topic=demo` } })
 assert.match(nextB("s1"), /deny.*\/clear/)
+assert.match(hook("pre", { session_id: "s1", tool_name: "Bash", tool_input: { command: 'node "x/alvar.mjs" next --topic=demo' } }), /deny.*\/clear/) // tanpa id juga
 assert.equal(nextB("s1", " --tanpa-clear"), "")                                // pelajar menolak /clear
 assert.equal(nextB("s2"), "")                                                  // sesi baru setelah /clear
 assert.equal(hook("pre", { session_id: "s1", tool_name: "Bash", tool_input: { command: "A next A" } }), "") // node yang sama boleh

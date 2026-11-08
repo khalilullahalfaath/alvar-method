@@ -350,9 +350,12 @@ const CMDS = {
 	next() {
 		const f = needFile()
 		const t = read(f)
-		dagGate(f, pos[0])
+		// Tanpa id node ("lanjut" setelah /clear): node pertama di frontmatter nodes: yang belum known/locked di map.
+		const node = pos[0] ?? declaredNodes(t)?.find((n) => !okNodes(t).has(n))
+		if (!node) die(declaredNodes(t) ? "Semua node sudah known/locked: A phase review." : "Pakai: next <node> (frontmatter sesi tidak punya nodes: [...]).")
+		dagGate(f, node)
 		const readTopic = (tp) => { const g = sessionFile(tp); return g ? read(g) : null }
-		say(`Langkah berikutnya ${pos[0]}: ${toCC(nextLessonStep(t, pos[0], audited(f, pos[0])))}${equivalentNote(t, pos[0], readTopic)}`)
+		say(`Langkah berikutnya ${node}: ${toCC(nextLessonStep(t, node, audited(f, node)))}${equivalentNote(t, node, readTopic)}`)
 	},
 	lesson() {
 		const node = pos[0]

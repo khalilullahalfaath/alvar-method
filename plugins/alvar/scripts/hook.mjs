@@ -42,7 +42,10 @@ if (ev === "start") {
 	if (/\.alvar\/sessions\//.test(blob) && /review_verdict:\s*READY/.test(blob) && state.phase !== "review")
 		deny("review_verdict: READY hanya boleh ditulis saat fase review (alvar phase review, lalu audit).")
 	// Gate /clear: node baru ditolak di sesi yang sama dengan node yang baru tuntas (konteks lama ikut terbaca tiap giliran).
-	const nx = input.tool_name === "Bash" && blob.match(/(?:alvar\.mjs"?|\bA)\s+next\s+([A-Za-z0-9]+)/)?.[1]
+	// "next" tanpa id = CLI memilih node berikutnya, jadi diperlakukan sebagai node baru.
+	// Cocokkan ke perintah asli, bukan blob: di blob tanda kutip menjadi /" sehingga `alvar.mjs" next` tidak terbaca.
+	const m = input.tool_name === "Bash" && String(ti.command ?? "").match(/(?:alvar\.mjs['"]?|\bA)\s+next(?:\s+([A-Za-z0-9]+))?/)
+	const nx = m && (m[1] ?? "(berikutnya)")
 	const r = state.resume
 	if (nx && r?.session && r.session === input.session_id && nx !== r.node && !blob.includes("--tanpa-clear"))
 		deny(`Node ${r.node} sudah tuntas di sesi ini. Minta pelajar mengetik /clear lalu 'lanjut' (progres aman di .alvar; konteks lama tidak ikut terbaca). Bila pelajar menolak /clear, ulangi perintah dengan --tanpa-clear.`)
