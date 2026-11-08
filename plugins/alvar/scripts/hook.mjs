@@ -12,6 +12,7 @@ if (!fs.existsSync(dir)) process.exit(0)
 const sp = path.join(dir, "state.json")
 const state = (() => { try { return JSON.parse(fs.readFileSync(sp, "utf8")) } catch { return {} } })()
 // writeSync: console.log ke pipe di Windows asinkron, process.exit sesudahnya membuang keluaran.
+const learnerSetting = (k) => { try { return fs.readFileSync(path.join(dir, "LEARNER.md"), "utf8").match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1].match(new RegExp(`^${k}:\\s*([^#\\r\\n]*?)\\s*(?:#.*)?$`, "m"))?.[1] } catch {} }
 const out = (o) => { fs.writeSync(1, JSON.stringify({ hookSpecificOutput: o })); process.exit(0) }
 
 if (ev === "start") {
@@ -41,6 +42,12 @@ if (ev === "start") {
 	if (input.tool_name === "Bash" && /\b(cat|type|Get-Content)\s+[^|;&]*\.alvar\/sessions\//.test(blob)) deny(SESS)
 	if (/\.alvar\/sessions\//.test(blob) && /review_verdict:\s*READY/.test(blob) && state.phase !== "review")
 		deny("review_verdict: READY hanya boleh ditulis saat fase review (alvar phase review, lalu audit).")
+	// Gate gambar: SVG di .alvar/visuals hanya atas permintaan pelajar (A gambar), kecuali LEARNER.md memilih figures: when_helpful.
+	const cmd = String(ti.command ?? "")
+	const svgWrite = (input.tool_name === "Write" || input.tool_name === "Edit") ? /\.alvar\/visuals\/[^"]*\.svg/.test(blob)
+		: input.tool_name === "Bash" && /\.alvar[\\/]visuals[\\/][^\s"']*\.svg/.test(cmd) && /open\([^)]*\.svg["'],\s*["']w|>\s*\S*\.svg|\b(cp|mv|Copy-Item|Move-Item|Set-Content|Out-File)\b/.test(cmd)
+	if (svgWrite && !state.figureOk && learnerSetting("figures") !== "when_helpful")
+		deny("Gambar SVG hanya dibuat bila pelajar memintanya. Bila pelajar meminta gambar untuk node ini, jalankan A gambar <node> dulu (lesson-writer: tambahkan gambar=ya pada prompt); bila tidak, tulis materi tanpa gambar.")
 	// Gate /clear: node baru ditolak di sesi yang sama dengan node yang baru tuntas (konteks lama ikut terbaca tiap giliran).
 	// "next" tanpa id = CLI memilih node berikutnya, jadi diperlakukan sebagai node baru.
 	// Cocokkan ke perintah asli, bukan blob: di blob tanda kutip menjadi /" sehingga `alvar.mjs" next` tidak terbaca.

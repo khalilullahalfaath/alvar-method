@@ -18,7 +18,7 @@ export const RULES = {
 - Rencana berubah = naikkan plan_version. Setelah disetujui: A phase teach.`,
 	teach: `FASE TEACH (A = ${ALVAR}). Urutan wajib per node N:
 0. A next N -> ikuti langkahnya.
-1. Materi ditulis subagent alvar-lesson-writer (prompt: "node N --topic=<slug> draf=<folder draf di scratchpad>"; dua node sekaligus boleh). Format materi hanya ada di keluaran A format (preferensi dan alasannya di LEARNER.md); jangan menyalin atau meringkasnya ke prompt, dan jangan menulis materi sendiri.
+1. Materi ditulis subagent alvar-lesson-writer (prompt: "node N --topic=<slug> draf=<folder draf di scratchpad>"; dua node sekaligus boleh). Tambahkan "gambar=ya" hanya bila pelajar meminta gambar untuk node ini, setelah menjalankan A gambar N; tanda G di checklist rencana lama tidak dihitung sebagai permintaan. Format materi hanya ada di keluaran A format (preferensi dan alasannya di LEARNER.md); jangan menyalin atau meringkasnya ke prompt, dan jangan menulis materi sendiri.
 2. A lesson N < berkas draf (seluruh materi). Apa yang ditampilkan di chat ditentukan keluarannya (mengikuti "reader" di LEARNER.md); ikuti persis, jangan menambah ringkasan.
 3. Spawn alvar-auditor (prompt: "node N"). Ada temuan = koreksi di file sesi, audit ulang.
 4. Tanya "ada pertanyaan?". Pertanyaan ISI materi: A clar-q N (stdin = pertanyaan verbatim), spawn alvar-clarifier ("node N"). Jawabannya (LaTeX) tersimpan di file sesi; apa yang ditampilkan di chat ditentukan keluaran clar-save, plus catatan LESSON_ISSUE/PREREQ bila ada. Lalu dengan Edit sisipkan satu baris sendiri di subkonsep yang ditanyakan, dipisah baris kosong: "Lihat juga: [[#^klar-N-k|Klarifikasi N (k)]]" (k = nomor klarifikasi). Baris dengan format persis ini tidak membuat audit basi. Logistik jawab sendiri.

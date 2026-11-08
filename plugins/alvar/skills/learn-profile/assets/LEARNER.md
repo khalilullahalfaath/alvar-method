@@ -2,6 +2,7 @@
 language: <language of the material, e.g. Indonesian, English>
 chat_math: <ascii | latex>   # can my chat/terminal render LaTeX? ascii = no
 reader: <obsidian | editor | chat>   # where I read the material and clarifications
+figures: <on_request | when_helpful>   # SVG pictures only when I ask, or whenever they help
 ---
 
 # Learner
@@ -66,7 +67,7 @@ Every field has a precise core that must not be simplified into something false.
 * Simple version at the end of each subsection: <short, 3-5 sentences (default) / long, retracing the whole line / none>.
 * **Readable in one sitting**: guiding questions, numbered parts I can stop between, and a bridge question to the next part.
 * Diagrams: <Mermaid diagrams automatically whenever a subsection is about a structure of relations (sequence, branching choice, states, dependencies, classification, cause and effect) (default) / only when I ask>.
-* Pictures (SVG figures): <only when I ask (default) / whenever a picture would materially help>.
+* Pictures (SVG figures): see `figures` above.
 * Code snippets: <a short runnable snippet for an algorithm or computation (default) / none>.
 * **Jelaskan balik** at the end of the node: 2-3 prompts asking me to explain why a key claim holds, in my own words. It is for me, offline: not graded, not counted as pending, and it does not hint at quiz items.
 * Optional exercises (manual practice, coding task): <keep them in the lesson but never require or remind me (default) / leave them out>.

@@ -18,7 +18,7 @@ One idea, one picture. The picture exists so the learner can accept the step —
 
 ## Output
 
-Write `.alvar/visuals/<slug>-<n>.svg` (create the folder). Embed or link it in the session file.
+First run `node "${CLAUDE_PLUGIN_ROOT}/scripts/alvar.mjs" gambar <node>` (the hook refuses SVG writes to `.alvar/visuals/` without it, unless LEARNER.md has `figures: when_helpful`). Then write `.alvar/visuals/<slug>-<n>.svg` (create the folder). Embed or link it in the session file.
 
 Prefer SVG. Use another format only if the harness cannot preview SVG.
 

@@ -371,6 +371,7 @@ const CMDS = {
 		const structure = lessonStructureIssues(cur, node, body)
 		if (structure.length) die(`Materi ${node} ditolak (struktur): ${structure.join("; ")}. Perbaiki lalu tulis ulang seluruh materi.`)
 		fs.writeFileSync(f, insertAfterNode(ensureNodeHeading(cur, node, body.match(new RegExp("^## Node " + node + "\\s*[—-]\\s*(.+?)\\s*$", "m"))?.[1] ?? ""), node, stripNodeHeading(body, node)))
+		if (state.figureOk) { delete state.figureOk; saveState() }   // izin gambar sekali pakai habis bersama materi ini
 		say(`ok ${node} (${body.length} karakter). ` + (READER === "chat"
 			? `Tampilkan materi di chat: jalankan A show ${node} --chat dan tampilkan keluarannya apa adanya (semua bagian, ikuti --bagian=).`
 			: `Jangan tampilkan materi di chat (pelajar membaca di ${READER_NAME}); cukup satu baris bahwa materi ${node} siap di file sesi.`))
@@ -471,13 +472,25 @@ const CMDS = {
 		say("ok")
 	},
 	"quiz-next"() { say(quizNext(pos[0])) },
+	// Izin menulis SVG ke .alvar/visuals (hook menolak tanpa izin ini, kecuali LEARNER.md figures: when_helpful).
+	// ponytail: izin global sekali pakai sampai A lesson berikutnya, bukan per node; per node bila ada kebutuhan gambar paralel.
+	gambar() { state.figureOk = pos[0] ?? true; saveState(); say(`ok: gambar SVG diizinkan sampai materi node berikutnya disimpan (A lesson). Untuk lesson-writer, tambahkan gambar=ya pada prompt.`) },
 	// Satu-satunya sumber format materi; dicetak lewat CLI karena path plugin tidak bisa di-Read langsung oleh subagent.
 	format() { sayPaged(read(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skills", "teach", "references", "format-materi.md"))) },
 	// Potongan file sesi; file utuh bisa ratusan ribu karakter dan tidak boleh di-Read utuh.
 	show() {
 		const t = read(needFile()), what = pos[0]
-		if (!what) die("Pakai: show plan | show <node>")
-		if (what === "plan") return sayPaged(`${t.split(/^## Node /m)[0]}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
+		if (!what) die("Pakai: show plan [node] | show <node>")
+		if (what === "plan") {
+			let plan = t.split(/^## Node /m)[0]
+			// show plan N: checklist hanya untuk N dan pendahulunya di DAG (rencana besar bisa memuat puluhan node).
+			const n = pos[1]
+			if (n) {
+				const keep = new Set([n, ...dagEdges(t).filter(([, b]) => b === n).map(([a]) => a)])
+				plan = plan.split("\n").filter((l) => { const id = l.match(/^- \*\*([A-Za-z0-9]+)\*\*/)?.[1]; return !id || keep.has(id) }).join("\n")
+			}
+			return sayPaged(`${plan}\n## Node status (map)\n${mapStatusSection(t).trim() || "(belum ada)"}`)
+		}
 		const sec = nodeSection(t, what)
 		if (!sec) die(`Bagian "## Node ${what}" belum ada.`)
 		sayPaged(args.includes("--chat") ? view(lessonOnly(sec)) : lessonOnly(sec))   // --chat: versi untuk ditampilkan ke pelajar

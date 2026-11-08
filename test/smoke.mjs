@@ -11,7 +11,7 @@ const run = (input, ...a) => { try { return execFileSync("node", [cli, ...a], { 
 const S = path.join(cwd, ".alvar", "sessions"), M = path.join(cwd, ".alvar", "maps")
 fs.mkdirSync(S, { recursive: true }); fs.mkdirSync(M, { recursive: true })
 const tbl = (h) => `| ${h.join(" | ")} |\n|${h.map(() => "---").join("|")}|\n`
-fs.writeFileSync(path.join(S, "2026-01-01-demo.md"), `---\ntopic: demo\nplan_version: 1\nnodes: [A, B]\n---\n# Sesi\n## Plan\nflowchart TD\n  A["A. satu"] --> B\n- **A**: A.1 satu; A.2 dua\n## Ledger\n${tbl(["subkonsep", "diajarkan di (anchor)", "item kuis", "tipe bukti (recognition/transfer)", "status"])}## Provenance\n${tbl(["id", "bagian materi", "evidence terdampak", "status"])}`)
+fs.writeFileSync(path.join(S, "2026-01-01-demo.md"), `---\ntopic: demo\nplan_version: 1\nnodes: [A, B]\n---\n# Sesi\n## Plan\nflowchart TD\n  A["A. satu"] --> B\n- **A**: A.1 satu; A.2 dua\n- **B**: B.1 tiga\n## Ledger\n${tbl(["subkonsep", "diajarkan di (anchor)", "item kuis", "tipe bukti (recognition/transfer)", "status"])}## Provenance\n${tbl(["id", "bagian materi", "evidence terdampak", "status"])}`)
 fs.writeFileSync(path.join(M, "demo.md"), `---\nupdated: 2026-01-01\n---\n# Map\n## Node status (otomatis dari write_quiz)\n${tbl(["node", "status", "bukti", "sesi"])}`)
 
 assert.match(run("", "phase", "teach"), /FASE TEACH/)
@@ -78,6 +78,8 @@ assert.match(r, /^DONE/)
 assert.doesNotMatch(r, /KONTEKS/)                                            // node belum tuntas: tidak diajak /clear
 assert.match(run("", "quiz-next", "A"), /^SELESAI/)                          // gate: kuis selesai tidak dimulai ulang diam-diam
 assert.match(run("", "show", "plan"), /flowchart TD[\s\S]*Node status \(map\)[\s\S]*\| A \|/)
+assert.doesNotMatch(run("", "show", "plan", "A"), /\*\*B\*\*: B\.1/)        // show plan N: checklist hanya N dan pendahulunya
+assert.match(run("", "show", "plan", "B"), /\*\*A\*\*: A\.1[\s\S]*\*\*B\*\*: B\.1/)
 const shown = run("", "show", "A")
 assert.match(shown, /### A\.1 Satu/); assert.doesNotMatch(shown, /Kuis formatif/) // materi saja, tanpa kuis
 const log = fs.readFileSync(path.join(S, "2026-01-01-demo.md"), "utf8")
@@ -92,6 +94,14 @@ assert.match(hook("pre", { tool_name: "Read", tool_input: { file_path: path.join
 assert.match(hook("pre", { tool_name: "Edit", tool_input: { file_path: path.join(cwd, ".alvar", "sessions", "x.md"), new_string: "review_verdict: READY" } }), /deny/)
 assert.match(hook("pre", { tool_name: "AskUserQuestion", tool_input: {} }), /deny/)
 assert.equal(hook("pre", { tool_name: "Bash", tool_input: { command: "node alvar.mjs next A" } }), "")
+// gate gambar: SVG ke .alvar/visuals hanya setelah A gambar
+const svgPy = { tool_name: "Bash", tool_input: { command: `python -c "open('D:/x/.alvar/visuals/demo-A-1.svg','w').write('<svg/>')"` } }
+const svgW = { tool_name: "Write", tool_input: { file_path: path.join(cwd, ".alvar", "visuals", "demo-A-1.svg"), content: "<svg/>" } }
+assert.match(hook("pre", svgPy), /deny.*A gambar/)
+assert.match(hook("pre", svgW), /deny.*A gambar/)
+assert.equal(hook("pre", { tool_name: "Bash", tool_input: { command: "ls .alvar/visuals/ | grep svg" } }), "")   // membaca boleh
+run("", "gambar", "A")
+assert.equal(hook("pre", svgPy), ""); assert.equal(hook("pre", svgW), "")
 const sessF = path.join(S, "2026-01-01-demo.md")
 assert.match(hook("pre", { tool_name: "Read", tool_input: { file_path: sessF } }), /deny.*A show/)   // file sesi utuh ditolak
 assert.equal(hook("pre", { tool_name: "Read", tool_input: { file_path: sessF, offset: 10, limit: 40 } }), "")
