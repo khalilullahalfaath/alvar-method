@@ -5,7 +5,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
-import { pathToFileURL } from "node:url"
+import { pathToFileURL, fileURLToPath } from "node:url"
 import { RULES } from "./rules.mjs"
 
 const CORE = process.env.ALVAR_CORE || path.join(os.homedir(), ".pi-learn-tools", "alvar-core.js")
@@ -418,6 +418,8 @@ const CMDS = {
 		say("ok")
 	},
 	"quiz-next"() { say(quizNext(pos[0])) },
+	// Satu-satunya sumber format materi; dicetak lewat CLI karena path plugin tidak bisa di-Read langsung oleh subagent.
+	format() { sayPaged(read(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skills", "teach", "references", "format-materi.md"))) },
 	// Potongan file sesi; file utuh bisa ratusan ribu karakter dan tidak boleh di-Read utuh.
 	show() {
 		const t = read(needFile()), what = pos[0]

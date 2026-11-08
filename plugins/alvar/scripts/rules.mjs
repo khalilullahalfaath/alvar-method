@@ -13,11 +13,12 @@ export const RULES = {
 	plan: `FASE PLAN (A = ${ALVAR}).
 - DAG mermaid: satu node = satu langkah penalaran, mulai dari known lewat edge. Checklist subkonsep per node (id A.1, A.2, ...).
 - Tanya bentuk ujian dan sisa waktu bila belum diketahui.
+- Rujukan: pilih buku yang relevan dari katalog "References I own" di LEARNER.md, plus sumber khusus sesi ini (silabus, slide, panduan ujian), lalu catat di rencana sesi beserta bab atau bagian per node. Jangan menyarankan sumber yang tidak ada di katalog tanpa menyebutnya sebagai saran.
 - Tulis rencana ke .alvar/sessions/<tgl>-<slug>.md (frontmatter topic:, plan_version:, bagian ## Ledger, ## Provenance). Lalu spawn subagent alvar-plan-reviewer, terapkan temuan valid, tunjukkan mermaid + satu baris apa yang direvisi, BERHENTI menunggu persetujuan.
 - Rencana berubah = naikkan plan_version. Setelah disetujui: A phase teach.`,
 	teach: `FASE TEACH (A = ${ALVAR}). Urutan wajib per node N:
 0. A next N -> ikuti langkahnya.
-1. Materi ditulis subagent alvar-lesson-writer (prompt: "node N --topic=<slug> draf=<folder draf di scratchpad>"; dua node sekaligus boleh). Format materi hanya ada di .alvar/LEARNER.md ("Narrative flow" sampai "Teach-back"); jangan menyalin atau meringkasnya ke prompt, dan jangan menulis materi sendiri.
+1. Materi ditulis subagent alvar-lesson-writer (prompt: "node N --topic=<slug> draf=<folder draf di scratchpad>"; dua node sekaligus boleh). Format materi hanya ada di keluaran A format (preferensi dan alasannya di LEARNER.md); jangan menyalin atau meringkasnya ke prompt, dan jangan menulis materi sendiri.
 2. A lesson N < berkas draf (seluruh materi). Materi TIDAK ditampilkan di chat, juga bukan ringkasannya: pelajar membacanya di Obsidian. Cukup satu baris bahwa materi N siap.
 3. Spawn alvar-auditor (prompt: "node N"). Ada temuan = koreksi di file sesi, audit ulang.
 4. Tanya "ada pertanyaan?". Pertanyaan ISI materi: A clar-q N (stdin = pertanyaan verbatim), spawn alvar-clarifier ("node N"). Jawabannya (LaTeX) hanya ada di file sesi; di chat cukup satu baris bahwa Klarifikasi N (k) siap di Obsidian, plus catatan LESSON_ISSUE/PREREQ bila ada. Lalu dengan Edit sisipkan satu baris sendiri di subkonsep yang ditanyakan, dipisah baris kosong: "Lihat juga: [[#^klar-N-k|Klarifikasi N (k)]]" (k = nomor klarifikasi). Baris dengan format persis ini tidak membuat audit basi. Logistik jawab sendiri.

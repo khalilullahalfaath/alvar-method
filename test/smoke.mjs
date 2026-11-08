@@ -15,6 +15,7 @@ fs.writeFileSync(path.join(S, "2026-01-01-demo.md"), `---\ntopic: demo\nplan_ver
 fs.writeFileSync(path.join(M, "demo.md"), `---\nupdated: 2026-01-01\n---\n# Map\n## Node status (otomatis dari write_quiz)\n${tbl(["node", "status", "bukti", "sesi"])}`)
 
 assert.match(run("", "phase", "teach"), /FASE TEACH/)
+assert.match(run("", "format"), /^# Format materi node Alvar[\s\S]*Jelaskan balik/)   // sumber tunggal format terbaca lewat CLI
 assert.match(run("", "next", "A"), /alvar lesson|A lesson/)
 assert.match(run("", "next", "B"), /Ditolak oleh DAG.*A/)            // gate DAG: pendahulu A belum known
 assert.match(run("", "next", "B", "--lewati"), /DAG dilewati/)       // dilewati eksplisit

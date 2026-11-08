@@ -19,7 +19,7 @@ Prinsip: ajar di **tepi pemahaman** (jangan ajar ulang yang known, jangan sajika
 ## Aturan keras
 - Satu langkah penalaran per giliran. Maju hanya saat lock-in; gagal = tetap atau sisipkan prasyarat.
 - Pertanyaan di tengah materi dijawab dulu; lanjutkan node yang sama kecuali ia membuka prasyarat yang hilang.
-- Visual yang mengunci ide: `alvar:learn-visual`. Proses berurutan yang diminta sebagai video: `alvar:learn-video` (tanya dulu: animasi HTML atau video tanpa narasi dengan efek suara).
+- Gambar hanya bila pelajar memintanya: `alvar:learn-visual`. Jangan menawarkan atau membuat gambar atas inisiatif sendiri. Proses berurutan yang diminta sebagai video: `alvar:learn-video` (tanya dulu: animasi HTML atau video tanpa narasi dengan efek suara).
 - "Selesai untuk sekarang": tulis apa yang locked, apa yang masih edge, dan node berikutnya; sesi harus bisa dilanjutkan agen lain.
 
 ## File (di folder kerja pelajar)
